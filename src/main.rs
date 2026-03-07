@@ -12,8 +12,8 @@ fn read_csv_mapped(file_path: &str) -> Result<Vec<Vec<f64>>, Box<dyn Error>>{
         if line.trim().is_empty() { continue }
 
         let row : Result<Vec<f64>, _> = line.split(';')
-                                                              .map(|value| value.trim().parse::<f64>())
-                                                              .collect();
+                                            .map(|value| value.trim().parse::<f64>())
+                                            .collect();
         result.push(row?);
     }
 
