@@ -40,22 +40,75 @@ fn get_distance_matrix_and_rewards(coordinates: Vec<Vec<f64>>) -> (Vec<Vec<i64>>
     (distance_matrix, rewards)
 }
 
-fn get_random_solution(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> (Vec<u64>, i64) {
-    let mut rng = rand::thread_rng();
+fn solve_random(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64) {
+    let mut _visit_subset : Vec<u64> = visit_subset.clone();
+    let mut total_score   : i64      = 0;
 
-    let     num_points   : u64      = rng.gen_range(2..distance_matrix.len() as u64); // In the context of TSP, we need at least 2 points to create a valid route
-    let     visit_subset : Vec<u64> = (0..distance_matrix.len() as u64).choose_multiple(&mut rng, num_points as usize);
-    let mut total_score  : i64      = 0;
-
-    for i in 0..(visit_subset.len() - 1) {
-        let from = visit_subset[i    ] as usize;
-        let to   = visit_subset[i + 1] as usize;
+    for i in 0.._visit_subset.len() {
+        let from = _visit_subset[i       % _visit_subset.len()] as usize;
+        let to   = _visit_subset[(i + 1) % _visit_subset.len()] as usize;
 
         total_score += rewards[to] - distance_matrix[from][to];
     }
-    total_score += rewards[visit_subset[0] as usize] - distance_matrix[visit_subset[visit_subset.len() - 1] as usize][visit_subset[0] as usize];
 
-    (visit_subset, total_score)
+    (_visit_subset, total_score)
+}
+
+fn solve_2_regret(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64) {
+    let mut _visit_subset : Vec<u64> = visit_subset.clone();
+    let mut total_score   : i64      = 0;
+    let mut route         : Vec<u64> = Vec::new();
+
+    for _ in 0..2 {
+        route.push(_visit_subset.remove(0));
+    }
+
+    for i in 0..route.len() {
+        let u = route[i] as usize;
+        let v = route[(i + 1) % route.len()] as usize;
+        total_score += rewards[u] - distance_matrix[u][v];
+    }
+
+    while !_visit_subset.is_empty() {
+        let mut best_regret  : i64   = i64::MIN;
+        let mut best_point   : u64   = 0;
+        let mut best_cost    : i64   = 0;
+        let mut best_postion : usize = 0;
+
+        for &point in &_visit_subset {
+            let mut best_insertion_cost    : i64   = i64::MAX;
+            let mut second_best_cost       : i64   = i64::MAX;
+            let mut insertion_index        : usize = 0;
+
+            for i in 0..route.len() {
+                let from : usize = route[i       % route.len()] as usize;
+                let to   : usize = route[(i + 1) % route.len()] as usize;
+
+                let insertion_cost = distance_matrix[from][point as usize] + distance_matrix[point as usize][to] - distance_matrix[from][to];
+
+                if insertion_cost < best_insertion_cost {
+                    second_best_cost       = best_insertion_cost;
+                    best_insertion_cost    = insertion_cost;
+                    insertion_index        = i + 1;
+                } else if insertion_cost < second_best_cost {
+                    second_best_cost       = insertion_cost;
+                }
+            }
+
+            let regret = second_best_cost - best_insertion_cost;
+            if regret > best_regret {
+                best_regret = regret;
+                best_point  = point;
+                best_cost   = best_insertion_cost;
+                best_postion = insertion_index;
+            }
+        }
+        route.insert(best_postion, best_point);
+        total_score += rewards[best_point as usize] - best_cost;
+        _visit_subset.retain(|&x| x != best_point);
+    }
+
+    (route, total_score)
 }
 
 fn calculate_score(route: &Vec<u64>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> i64 {
@@ -105,10 +158,19 @@ fn main() {
         distance_matrix = (read_result.unwrap()).into_iter().map(|row| row.into_iter().map(|value| value as i64).collect()).collect();
     }
 
+    let mut rng = rand::thread_rng();
+
+    let     num_points   : u64      = rng.gen_range(2..distance_matrix.len() as u64); 
+    let     visit_subset : Vec<u64> = (0..distance_matrix.len() as u64).choose_multiple(&mut rng, num_points as usize);
+
     // println!("Distance matrix: {:?}", rewards);
-    let (solution, score) = get_random_solution(&distance_matrix, &rewards);
-    // let calculated_score = calculate_score(&solution, &distance_matrix, &rewards);
-    // assert_eq!(score, calculated_score, "The calculated score does not match the expected score.");
-    println!("Random solution: {:?} with score: {}", solution, score);
+    let (random_solution, random_score) = solve_random(&distance_matrix, &rewards, &visit_subset);
+    let (regret_solution, regret_score) = solve_2_regret(&distance_matrix, &rewards, &visit_subset);
+    let calculated_score = calculate_score(&random_solution, &distance_matrix, &rewards);
+    let calculated_score_regret = calculate_score(&regret_solution, &distance_matrix, &rewards);
+    assert_eq!(random_score, calculated_score, "The calculated score does not match the expected score.");
+    assert_eq!(regret_score, calculated_score_regret, "The calculated score does not match the expected score.");
+    println!("Random solution: {:?} with score: {}", random_solution, random_score);
+    println!("Regret solution: {:?} with score: {}", regret_solution, regret_score);
     //TODO - wagi jeszcze nie wiem jak interpretować
 }
