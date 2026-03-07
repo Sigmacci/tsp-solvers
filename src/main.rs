@@ -55,6 +55,10 @@ fn solve_random(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subse
 }
 
 fn solve_2_regret(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64) {
+    solve_2_regret_weighted(distance_matrix, rewards, visit_subset, 0.0)
+}
+
+fn solve_2_regret_weighted(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>, weight: f64) -> (Vec<u64>, i64) {
     let mut _visit_subset : Vec<u64> = visit_subset.clone();
     let mut total_score   : i64      = 0;
     let mut route         : Vec<u64> = Vec::new();
@@ -95,7 +99,7 @@ fn solve_2_regret(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_sub
                 }
             }
 
-            let regret = second_best_cost - best_insertion_cost;
+            let regret = second_best_cost - best_insertion_cost - (weight * best_insertion_cost as f64) as i64;
             if regret > best_regret {
                 best_regret = regret;
                 best_point  = point;
@@ -166,11 +170,18 @@ fn main() {
     // println!("Distance matrix: {:?}", rewards);
     let (random_solution, random_score) = solve_random(&distance_matrix, &rewards, &visit_subset);
     let (regret_solution, regret_score) = solve_2_regret(&distance_matrix, &rewards, &visit_subset);
+    let (regret_weighted_solution, regret_weighted_score) = solve_2_regret_weighted(&distance_matrix, &rewards, &visit_subset, -1.5);
+
     let calculated_score = calculate_score(&random_solution, &distance_matrix, &rewards);
     let calculated_score_regret = calculate_score(&regret_solution, &distance_matrix, &rewards);
+    let calculated_score_regret_weighted = calculate_score(&regret_weighted_solution, &distance_matrix, &rewards);
+
     assert_eq!(random_score, calculated_score, "The calculated score does not match the expected score.");
-    assert_eq!(regret_score, calculated_score_regret, "The calculated score does not match the expected score.");
+    assert_eq!(regret_score, calculated_score_regret, "The calculated score for the regret solution does not match the expected score.");
+    assert_eq!(regret_weighted_score, calculated_score_regret_weighted, "The calculated score for the weighted regret solution does not match the expected score.");
+
     println!("Random solution: {:?} with score: {}", random_solution, random_score);
     println!("Regret solution: {:?} with score: {}", regret_solution, regret_score);
+    println!("Regret weighted solution: {:?} with score: {}", regret_weighted_solution, regret_weighted_score);
     //TODO - wagi jeszcze nie wiem jak interpretować
 }
