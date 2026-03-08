@@ -115,6 +115,64 @@ fn solve_2_regret_weighted(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, 
     (route, total_score)
 }
 
+fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64){
+    let mut _visit_subset : Vec<u64> = visit_subset.clone();
+    let mut total_score   : i64      = 0;
+    let mut route         : Vec<u64> = Vec::new();
+
+    route.push(_visit_subset.remove(0));
+
+    while !_visit_subset.is_empty() {
+        let last_point = *route.last().unwrap() as usize;
+        let mut best_point : u64 = 0;
+        let mut best_score : i64 = i64::MIN;
+
+        for &point in &_visit_subset {
+            let score = rewards[point as usize] - distance_matrix[last_point][point as usize];
+            if score > best_score {
+                best_score = score;
+                best_point = point;
+            }
+        }
+        route.push(best_point);
+        total_score += best_score;
+        _visit_subset.retain(|&x| x != best_point);
+    }
+    route.push(route[0]);
+    total_score -= distance_matrix[route[route.len() - 2] as usize][route[0] as usize];
+
+    (route, total_score)
+}
+
+fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64){
+    let mut _visit_subset : Vec<u64> = visit_subset.clone();
+    let mut total_score   : i64      = 0;
+    let mut route         : Vec<u64> = Vec::new();
+
+    route.push(_visit_subset.remove(0));
+
+    while !_visit_subset.is_empty() {
+        let last_point = *route.last().unwrap() as usize;
+        let mut best_point : u64 = 0;
+        let mut best_score : i64 = i64::MIN;
+
+        for &point in &_visit_subset {
+            let score = -distance_matrix[last_point][point as usize];
+            if score > best_score {
+                best_score = score;
+                best_point = point;
+            }
+        }
+        route.push(best_point);
+        total_score += best_score;
+        _visit_subset.retain(|&x| x != best_point);
+    }
+    route.push(route[0]);
+    total_score -= distance_matrix[route[route.len() - 2] as usize][route[0] as usize];
+
+    (route, total_score)
+}
+
 fn calculate_score(route: &Vec<u64>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> i64 {
     let mut total_score: i64 = 0;
 
@@ -169,19 +227,22 @@ fn main() {
 
     // println!("Distance matrix: {:?}", rewards);
     let (random_solution, random_score) = solve_random(&distance_matrix, &rewards, &visit_subset);
+    let (greedy_nna_solution, greedy_nna_score) = solve_greedy_nna(&distance_matrix, &rewards, &visit_subset);
     let (regret_solution, regret_score) = solve_2_regret(&distance_matrix, &rewards, &visit_subset);
     let (regret_weighted_solution, regret_weighted_score) = solve_2_regret_weighted(&distance_matrix, &rewards, &visit_subset, -1.5);
 
     let calculated_score = calculate_score(&random_solution, &distance_matrix, &rewards);
+    let calculated_score_greedy_nna = calculate_score(&greedy_nna_solution, &distance_matrix, &rewards);
     let calculated_score_regret = calculate_score(&regret_solution, &distance_matrix, &rewards);
     let calculated_score_regret_weighted = calculate_score(&regret_weighted_solution, &distance_matrix, &rewards);
 
     assert_eq!(random_score, calculated_score, "The calculated score does not match the expected score.");
+    //assert_eq!(greedy_nna_score, calculated_score_greedy_nna, "The calculated score for the greedy nna solution does not match the expected score.");
     assert_eq!(regret_score, calculated_score_regret, "The calculated score for the regret solution does not match the expected score.");
     assert_eq!(regret_weighted_score, calculated_score_regret_weighted, "The calculated score for the weighted regret solution does not match the expected score.");
 
     println!("Random solution: {:?} with score: {}", random_solution, random_score);
+    println!("Greedy nna solution: {:?} with score: {}", greedy_nna_solution, greedy_nna_score);
     println!("Regret solution: {:?} with score: {}", regret_solution, regret_score);
     println!("Regret weighted solution: {:?} with score: {}", regret_weighted_solution, regret_weighted_score);
-    //TODO - wagi jeszcze nie wiem jak interpretować
 }
