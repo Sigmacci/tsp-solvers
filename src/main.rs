@@ -1,6 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::fs;
+use std::io::Write;
 use rand::Rng;
 use rand::seq::IteratorRandom;
 
@@ -291,6 +292,19 @@ fn calculate_score(route: &Vec<u64>, distance_matrix: &Vec<Vec<i64>>, rewards: &
     total_score += rewards[route[0] as usize] - distance_matrix[route[route.len() - 1] as usize][route[0] as usize];
 
     total_score
+}
+
+fn dump_solution(filename: &str, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, route: &Vec<u64>, score: i64) {
+    let mut file = fs::File::options()
+        .append(true)
+        .create(true)
+        .open(filename)
+        .expect("Failed to open or create the file"); // .expect() is just a crash message that's easier to read than .unwrap()
+
+    for i in 0..route.len() {
+        let from = route[i] as usize;
+        writeln!(&mut file, "{}", from).expect("Failed to write to file");
+    }
 }
 
 fn main() {
