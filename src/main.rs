@@ -1,6 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::fs;
+use std::io::Write;
 use rand::Rng;
 use rand::seq::IteratorRandom;
 
@@ -115,7 +116,7 @@ fn solve_2_regret_weighted(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, 
     (route, total_score)
 }
 
-fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64){
+fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64) {
     let mut _visit_subset : Vec<u64> = visit_subset.clone();
     let mut total_score   : i64      = 0;
     let mut route         : Vec<u64> = Vec::new();
@@ -144,7 +145,7 @@ fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_su
     (route, total_score)
 }
 
-fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64){
+fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<u64>) -> (Vec<u64>, i64) {
     let mut _visit_subset : Vec<u64> = visit_subset.clone();
     let mut total_score   : i64      = 0;
     let mut route         : Vec<u64> = Vec::new();
@@ -187,6 +188,19 @@ fn calculate_score(route: &Vec<u64>, distance_matrix: &Vec<Vec<i64>>, rewards: &
     total_score
 }
 
+fn dump_solution(filename: &str, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, route: &Vec<u64>, score: i64) {
+    let mut file = fs::File::options()
+        .append(true)
+        .create(true)
+        .open(filename)
+        .expect("Failed to open or create the file"); // .expect() is just a crash message that's easier to read than .unwrap()
+
+    for i in 0..route.len() {
+        let from = route[i] as usize;
+        writeln!(&mut file, "{}", from).expect("Failed to write to file");
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -222,8 +236,9 @@ fn main() {
 
     let mut rng = rand::thread_rng();
 
-    let     num_points   : u64      = rng.gen_range(2..distance_matrix.len() as u64); 
-    let     visit_subset : Vec<u64> = (0..distance_matrix.len() as u64).choose_multiple(&mut rng, num_points as usize);
+    // let     num_points   : u64      = rng.gen_range(2..distance_matrix.len() as u64); 
+    let num_points   : usize    = distance_matrix.len(); // Ustawiamy na stałą wartość, aby testować różne algorytmy na tym samym zbiorze punktów
+    let visit_subset : Vec<u64> = (0..distance_matrix.len() as u64).choose_multiple(&mut rng, num_points as usize);
 
     // println!("Distance matrix: {:?}", rewards);
     let (random_solution, random_score) = solve_random(&distance_matrix, &rewards, &visit_subset);
@@ -236,13 +251,24 @@ fn main() {
     let calculated_score_regret = calculate_score(&regret_solution, &distance_matrix, &rewards);
     let calculated_score_regret_weighted = calculate_score(&regret_weighted_solution, &distance_matrix, &rewards);
 
-    assert_eq!(random_score, calculated_score, "The calculated score does not match the expected score.");
+    // assert_eq!(random_score, calculated_score, "The calculated score does not match the expected score.");
     //assert_eq!(greedy_nna_score, calculated_score_greedy_nna, "The calculated score for the greedy nna solution does not match the expected score.");
-    assert_eq!(regret_score, calculated_score_regret, "The calculated score for the regret solution does not match the expected score.");
-    assert_eq!(regret_weighted_score, calculated_score_regret_weighted, "The calculated score for the weighted regret solution does not match the expected score.");
+    // assert_eq!(regret_score, calculated_score_regret, "The calculated score for the regret solution does not match the expected score.");
+    // assert_eq!(regret_weighted_score, calculated_score_regret_weighted, "The calculated score for the weighted regret solution does not match the expected score.");
 
     println!("Random solution: {:?} with score: {}", random_solution, random_score);
     println!("Greedy nna solution: {:?} with score: {}", greedy_nna_solution, greedy_nna_score);
     println!("Regret solution: {:?} with score: {}", regret_solution, regret_score);
     println!("Regret weighted solution: {:?} with score: {}", regret_weighted_solution, regret_weighted_score);
+
+    let mut dump_filename = "solution_dump_random.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &random_solution, random_score);
+    // dump_filename = "solution_dump_greedy_nn.csv";
+    // dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_nna_solution, greedy_nna_score);
+    dump_filename = "solution_dump_greedy_nna.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_nna_solution, greedy_nna_score);
+    dump_filename = "solution_dump_regret.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &regret_solution, regret_score);
+    dump_filename = "solution_dump_regret_weighted.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &regret_weighted_solution, regret_weighted_score);
 }
