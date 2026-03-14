@@ -363,4 +363,19 @@ fn main() {
     println!("Greedy gca solution: {:?} with score: {}", greedy_gca_solution, greedy_gca_score);
     println!("Regret solution: {:?} with score: {}", regret_solution, regret_score);
     println!("Regret weighted solution: {:?} with score: {}", regret_weighted_solution, regret_weighted_score);
+
+    let mut dump_filename = "solution_dump_random.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &random_solution, random_score);
+    dump_filename = "solution_dump_greedy_nn.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_nn_solution, greedy_nn_score);
+    dump_filename = "solution_dump_greedy_nna.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_nna_solution, greedy_nna_score);
+    dump_filename = "solution_dump_greedy_gc.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_gc_solution, greedy_gc_score);
+    dump_filename = "solution_dump_greedy_gca.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_gca_solution, greedy_gca_score);
+    dump_filename = "solution_dump_regret.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &regret_solution, regret_score);
+    dump_filename = "solution_dump_regret_weighted.csv";
+    dump_solution(dump_filename, &distance_matrix, &rewards, &regret_weighted_solution, regret_weighted_score);
 }
