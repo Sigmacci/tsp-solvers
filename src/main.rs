@@ -144,7 +144,7 @@ fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_su
     let mut route         : Vec<usize> = Vec::new();
     let mut total_score   : i64        = 0;
     route.push(_visit_subset.remove(0));
-
+    total_score += rewards[route[0]];
     while !_visit_subset.is_empty() {
         let last_point = *route.last().unwrap();
         let mut best_point : usize = 0;
@@ -174,7 +174,7 @@ fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_s
     let mut total_score   : i64        = 0;
 
     route.push(_visit_subset.remove(0));
-
+    total_score += rewards[route[0]];
     while !_visit_subset.is_empty() {
         let last_point = *route.last().unwrap();
         let mut best_point : usize = 0;
@@ -205,6 +205,7 @@ fn solve_greedy_gc(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_su
     let mut total_score   : i64        = 0;
 
     route.push(_visit_subset.remove(0));
+    total_score += rewards[route[0]];
     let mut best_point : usize = 0;
     let mut best_score : i64 = i64::MIN;
     let last_point = *route.last().unwrap();
@@ -256,17 +257,19 @@ fn solve_greedy_gca(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_s
     let mut total_score   : i64        = 0;
 
     route.push(_visit_subset.remove(0));
+    total_score += rewards[route[0]];
     let mut best_point : usize = 0;
     let mut best_score : i64 = i64::MIN;
     let last_point = *route.last().unwrap() as usize;
     for &point in &_visit_subset {
-        let score = rewards[point as usize] - distance_matrix[last_point][point as usize];
+        let score = -distance_matrix[last_point][point as usize];
         if score > best_score {
             best_score = score;
             best_point = point;
         }
     }
     route.push(best_point);
+    total_score += rewards[best_point] + best_score;
     _visit_subset.retain(|&x| x != best_point);
     while !_visit_subset.is_empty() {
         let mut best_point = 0;
