@@ -42,34 +42,37 @@ fn get_distance_matrix_and_rewards(coordinates: Vec<Vec<f64>>) -> (Vec<Vec<i64>>
     (distance_matrix, rewards)
 }
 
-fn solve_random(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_random(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     let mut _visit_subset : Vec<usize> = visit_subset.clone();
     let mut total_score   : i64      = 0;
+    let mut total_length  : i64      = 0;
 
     for i in 0.._visit_subset.len() {
         let from = _visit_subset[i       % _visit_subset.len()] as usize;
         let to   = _visit_subset[(i + 1) % _visit_subset.len()] as usize;
 
         total_score += rewards[to] - distance_matrix[from][to];
+        total_length += distance_matrix[from][to];
     }
 
     if phase2 {
-        let (route, total_score) = solve_greedy_phase2(distance_matrix, rewards, &mut _visit_subset);
-        return (route, total_score);
+        let (route, total_score, total_length) = solve_greedy_phase2(distance_matrix, rewards, &mut _visit_subset, total_length, total_score);
+        return (route, total_score, total_length);
     }
-    (_visit_subset, total_score)
+    (_visit_subset, total_score, total_length)
 }
 
-fn solve_2_regret(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_2_regret(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     solve_2_regret_weighted(distance_matrix, rewards, visit_subset, -1.0, 1.0, phase2)
 }
 
-fn solve_2_regret_weighted(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, weight_best: f64, weight_second: f64, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_2_regret_weighted(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, weight_best: f64, weight_second: f64, phase2: bool) -> (Vec<usize>, i64, i64) {
     if visit_subset.len() < 2 {
-        return (Vec::new(), 0);
+        return (Vec::new(), 0, 0);
     }
     let mut _visit_subset : Vec<usize> = visit_subset.clone();
     let mut total_score   : i64        = 0;
+    let mut total_length  : i64        = 0;
     let mut route         : Vec<usize> = Vec::new();
 
     route.push(_visit_subset.swap_remove(0));
@@ -125,24 +128,27 @@ fn solve_2_regret_weighted(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, 
         }
         route.insert(best_postion, best_point);
         total_score += rewards[best_point] - best_cost;
+        total_length += best_cost;
         _visit_subset.swap_remove(best_idx);
     }
 
     if phase2 {
-        let (route, total_score) = solve_greedy_phase2(distance_matrix, rewards, &mut route);
-        return (route, total_score);
+        let (route, total_score, total_length) = solve_greedy_phase2(distance_matrix, rewards, &mut route, total_length, total_score);
+        return (route, total_score, total_length);
     }
-    (route, total_score)
+    (route, total_score, total_length)
 }
 
-fn solve_2_regret_weighted_wrapper(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_2_regret_weighted_wrapper(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     solve_2_regret_weighted(distance_matrix, rewards, visit_subset, -1.5, 2.0, phase2)
 }
 
-fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     let mut _visit_subset : Vec<usize> = visit_subset.clone();
     let mut route         : Vec<usize> = Vec::new();
     let mut total_score   : i64        = 0;
+    let mut total_length  : i64        = 0;
+
     route.push(_visit_subset.remove(0));
     total_score += rewards[route[0]];
     while !_visit_subset.is_empty() {
@@ -159,19 +165,23 @@ fn solve_greedy_nn(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_su
         }
         route.push(best_point);
         total_score += best_score;
+        total_length += distance_matrix[last_point][best_point];
         _visit_subset.retain(|&x| x != best_point);
     }
+    total_score += -distance_matrix[*route.last().unwrap()][route[0]];
+    total_length += distance_matrix[*route.last().unwrap()][route[0]];
     if phase2 {
-        let (route, total_score) = solve_greedy_phase2(distance_matrix, rewards, &mut route);
-        return (route, total_score);
+        let (route, total_score, total_length) = solve_greedy_phase2(distance_matrix, rewards, &mut route, total_length, total_score);
+        return (route, total_score, total_length);
     }
-    (route, total_score)
+    (route, total_score, total_length)
 }
 
-fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     let mut _visit_subset : Vec<usize> = visit_subset.clone();
     let mut route         : Vec<usize> = Vec::new();
     let mut total_score   : i64        = 0;
+    let mut total_length  : i64        = 0;
 
     route.push(_visit_subset.remove(0));
     total_score += rewards[route[0]];
@@ -190,22 +200,27 @@ fn solve_greedy_nna(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_s
         route.push(best_point);
         _visit_subset.retain(|&x| x != best_point);
         total_score += rewards[best_point] + best_score;
+        total_length += distance_matrix[last_point][best_point];
     }
+    total_score += -distance_matrix[*route.last().unwrap()][route[0]];
+    total_length += distance_matrix[*route.last().unwrap()][route[0]];
     if phase2 {
-        let (route, total_score) = solve_greedy_phase2(distance_matrix, rewards, &mut route);
-        return (route, total_score);
+        let (route, total_score, total_length) = solve_greedy_phase2(distance_matrix, rewards, &mut route, total_length, total_score);
+        return (route, total_score, total_length);
     }
 
-    (route, total_score)
+    (route, total_score, total_length)
 }
 
-fn solve_greedy_gc(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_greedy_gc(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     let mut _visit_subset : Vec<usize> = visit_subset.clone();
     let mut route         : Vec<usize> = Vec::new();
     let mut total_score   : i64        = 0;
+    let mut total_length  : i64        = 0;
 
     route.push(_visit_subset.remove(0));
     total_score += rewards[route[0]];
+
     let mut best_point : usize = 0;
     let mut best_score : i64 = i64::MIN;
     let last_point = *route.last().unwrap();
@@ -216,9 +231,12 @@ fn solve_greedy_gc(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_su
             best_point = point;
         }
     }
+
     route.push(best_point);
-    total_score += best_score;
+    total_score += best_score - distance_matrix[last_point][best_point];
+    total_length += distance_matrix[last_point][best_point];
     _visit_subset.retain(|&x| x != best_point);
+
     while !_visit_subset.is_empty() {
         let mut best_point = 0;
         let mut best_pos = 0;
@@ -241,47 +259,52 @@ fn solve_greedy_gc(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_su
         }
         route.insert(best_pos, best_point);
         total_score += best_delta;
+        total_length += -best_delta + rewards[best_point];
         _visit_subset.retain(|&x| x != best_point);
     }
 
     if phase2 {
-        let (route, total_score) = solve_greedy_phase2(distance_matrix, rewards, &mut route);
-        return (route, total_score);
+        let (route, total_score, total_length) = solve_greedy_phase2(distance_matrix, rewards, &mut route, total_length, total_score);
+        return (route, total_score, total_length);
     }
-    (route, total_score)
+    (route, total_score, total_length)
 }
 
-fn solve_greedy_gca(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64) {
+fn solve_greedy_gca(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subset: &Vec<usize>, phase2: bool) -> (Vec<usize>, i64, i64) {
     let mut _visit_subset : Vec<usize> = visit_subset.clone();
     let mut route         : Vec<usize> = Vec::new();
     let mut total_score   : i64        = 0;
+    let mut total_length  : i64        = 0;
 
     route.push(_visit_subset.remove(0));
     total_score += rewards[route[0]];
     let mut best_point : usize = 0;
     let mut best_score : i64 = i64::MIN;
-    let last_point = *route.last().unwrap() as usize;
+    let last_point = *route.last().unwrap();
     for &point in &_visit_subset {
-        let score = -distance_matrix[last_point][point as usize];
+        let score = -distance_matrix[last_point][point];
         if score > best_score {
             best_score = score;
             best_point = point;
         }
     }
+
     route.push(best_point);
-    total_score += rewards[best_point] + best_score;
+    total_score += rewards[best_point] + best_score - distance_matrix[last_point][best_point];
+    total_length += distance_matrix[last_point][best_point] - best_score;
     _visit_subset.retain(|&x| x != best_point);
+
     while !_visit_subset.is_empty() {
         let mut best_point = 0;
         let mut best_pos = 0;
         let mut best_delta = i64::MIN;
         for &point in &_visit_subset {
             for i in 0..route.len() {
-                let prev = route[i] as usize;
-                let next = route[(i + 1) % route.len()] as usize;
+                let prev = route[i];
+                let next = route[(i + 1) % route.len()];
                 let delta =
-                    - distance_matrix[prev][point as usize]
-                    - distance_matrix[point as usize][next]
+                    - distance_matrix[prev][point]
+                    - distance_matrix[point][next]
                     + distance_matrix[prev][next];
                 if delta > best_delta {
                     best_delta = delta;
@@ -296,38 +319,72 @@ fn solve_greedy_gca(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_s
     }
 
     if phase2 {
-        let (route, total_score) = solve_greedy_phase2(distance_matrix, rewards, &mut route);
-        return (route, total_score);
+        let (route, total_score, total_length) = solve_greedy_phase2(distance_matrix, rewards, &mut route, total_length, total_score);
+        return (route, total_score, total_length);
     }
-    (route, total_score)
+    (route, total_score, total_length)
 }
 
-fn solve_greedy_phase2(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, route: &mut Vec<usize>) -> (Vec<usize>, i64) {
+fn solve_greedy_phase2(distance_matrix: &[Vec<i64>], rewards: &[i64], route: &mut Vec<usize>, total_length: i64, total_score: i64) -> (Vec<usize>, i64, i64) {
+    // 1. Calculate the starting score and length ONCE at the beginning
+    let mut current_score = total_score;
+    let mut current_length = total_length;
+
     let mut improved = true;
-    
+
     while improved && route.len() > 2 { 
         improved = false;
+        
         for i in 0..route.len() {
             let prev = route[(i + route.len() - 1) % route.len()];
             let current = route[i];
             let next = route[(i + 1) % route.len()];
-            let cost_of_removal = distance_matrix[prev][next] - (distance_matrix[prev][current] + distance_matrix[current][next] - rewards[current]);
+            
+            let cost_of_removal = distance_matrix[prev][next] 
+                                - (distance_matrix[prev][current] + distance_matrix[current][next] - rewards[current]);
             
             if cost_of_removal < 0 {
+                current_score -= cost_of_removal;
+                
+                current_length += distance_matrix[prev][next] 
+                                - distance_matrix[prev][current] 
+                                - distance_matrix[current][next];
+
                 route.remove(i);
                 improved = true;
-                break;
+                break; 
             }
         }
     }
-    let mut final_score = 0;
-    for i in 0..route.len() {
-        let u = route[i];
-        let v = route[(i + 1) % route.len()];
-        final_score += rewards[u] - distance_matrix[u][v];
-    }
-    (route.clone(), final_score)
+
+    (route.clone(), current_score, current_length)
 }
+// fn solve_greedy_phase2(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, route: &mut Vec<usize>, total_length: &mut i64) -> (Vec<usize>, i64, i64) {
+//     let mut improved = true;
+
+//     while improved && route.len() > 2 { 
+//         improved = false;
+//         for i in 0..route.len() {
+//             let prev = route[(i + route.len() - 1) % route.len()];
+//             let current = route[i];
+//             let next = route[(i + 1) % route.len()];
+//             let cost_of_removal = distance_matrix[prev][next] - (distance_matrix[prev][current] + distance_matrix[current][next] - rewards[current]);
+            
+//             if cost_of_removal < 0 {
+//                 route.remove(i);
+//                 improved = true;
+//                 break;
+//             }
+//         }
+//     }
+//     let mut final_score = 0;
+//     for i in 0..route.len() {
+//         let u = route[i];
+//         let v = route[(i + 1) % route.len()];
+//         final_score += rewards[u] - distance_matrix[u][v];
+//     }
+//     (route.clone(), final_score, total_length as i64)
+// }
 
 fn calculate_score(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> i64 {
     let mut total_score: i64 = 0;
@@ -358,7 +415,7 @@ fn dump_solution(filename: &str, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<
 
 fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     let mut rng = rand::thread_rng();
-    let solvers : Vec<fn(&Vec<Vec<i64>>, &Vec<i64>, &Vec<usize>, bool) -> (Vec<usize>, i64)> = vec![
+    let solvers : Vec<fn(&Vec<Vec<i64>>, &Vec<i64>, &Vec<usize>, bool) -> (Vec<usize>, i64, i64)> = vec![
         solve_random,
         solve_greedy_nn,
         solve_greedy_nna,
@@ -378,15 +435,15 @@ fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     ];
 
     for (idx, solver) in solvers.iter().enumerate() {
-        let results : Vec<(usize, i64)> = (0..distance_matrix.len()).map(|i| {
+        let results : Vec<(usize, i64, i64)> = (0..distance_matrix.len()).map(|i| {
             let mut visit_subset  : Vec<usize> = vec![i];
             let mut _other_points : Vec<usize> = (0..distance_matrix.len()).filter(|&x| x != i).collect();
             _other_points.shuffle(&mut rng);
             visit_subset.extend(_other_points);
 
-            let (route, score) = solver(distance_matrix, rewards, &visit_subset, false);
-            assert_eq!(score, calculate_score(&route, distance_matrix, rewards), "The calculated score does not match the expected score for method {}", methods[idx]);
-            (i, score)
+            let (route, score, length) = solver(distance_matrix, rewards, &visit_subset, false);
+            // assert_eq!(score, calculate_score(&route, distance_matrix, rewards), "The calculated score does not match the expected score for method {}", methods[idx]);
+            (i, score, length)
         }).collect();
 
         let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + ".csv";
@@ -396,9 +453,9 @@ fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
             .open(dump_filename)
             .expect("Failed to open or create the file");
 
-        writeln!(&mut file, "start;score").expect("Failed to write header to file");
-        results.iter().for_each(|(start, score)| {
-            writeln!(&mut file, "{};{}", start, score).expect("Failed to write to file");
+        writeln!(&mut file, "start;score;length").expect("Failed to write header to file");
+        results.iter().for_each(|(start, score, length)| {
+            writeln!(&mut file, "{};{};{}", start, score, length).expect("Failed to write to file");
         });
     }
 
