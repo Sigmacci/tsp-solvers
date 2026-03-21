@@ -326,7 +326,6 @@ fn solve_greedy_gca(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_s
 }
 
 fn solve_greedy_phase2(distance_matrix: &[Vec<i64>], rewards: &[i64], route: &mut Vec<usize>, total_length: i64, total_score: i64) -> (Vec<usize>, i64, i64) {
-    // 1. Calculate the starting score and length ONCE at the beginning
     let mut current_score = total_score;
     let mut current_length = total_length;
 
@@ -359,32 +358,6 @@ fn solve_greedy_phase2(distance_matrix: &[Vec<i64>], rewards: &[i64], route: &mu
 
     (route.clone(), current_score, current_length)
 }
-// fn solve_greedy_phase2(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, route: &mut Vec<usize>, total_length: &mut i64) -> (Vec<usize>, i64, i64) {
-//     let mut improved = true;
-
-//     while improved && route.len() > 2 { 
-//         improved = false;
-//         for i in 0..route.len() {
-//             let prev = route[(i + route.len() - 1) % route.len()];
-//             let current = route[i];
-//             let next = route[(i + 1) % route.len()];
-//             let cost_of_removal = distance_matrix[prev][next] - (distance_matrix[prev][current] + distance_matrix[current][next] - rewards[current]);
-            
-//             if cost_of_removal < 0 {
-//                 route.remove(i);
-//                 improved = true;
-//                 break;
-//             }
-//         }
-//     }
-//     let mut final_score = 0;
-//     for i in 0..route.len() {
-//         let u = route[i];
-//         let v = route[(i + 1) % route.len()];
-//         final_score += rewards[u] - distance_matrix[u][v];
-//     }
-//     (route.clone(), final_score, total_length as i64)
-// }
 
 fn calculate_score(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> i64 {
     let mut total_score: i64 = 0;
