@@ -600,69 +600,148 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
     let mut rng = rand::thread_rng();
     let neighborhood_types = vec![NeighborhoodType::VertexSwap, NeighborhoodType::EdgeSwap];
     let greedy_options = vec![true, false];
-    let solvers : Vec<fn(&Vec<Vec<i64>>, &Vec<i64>, &Vec<usize>, bool) -> (Vec<usize>, i64, i64)> = vec![
+    let solvers: Vec<fn(&Vec<Vec<i64>>, &Vec<i64>, &Vec<usize>, bool) -> (Vec<usize>, i64, i64)> = vec![
         solve_random,
-        solve_2_regret
+        solve_2_regret,
     ];
-    let methods : Vec<&str> = vec![
+    let methods: Vec<&str> = vec![
         "random",
-        "2_regret"
+        "2_regret",
     ];
 
-    let mut max_found_time : i64 = 0;
-    let mut start_time = time::Instant::now(); //For knowing for how long should random search run
+    let mut max_found_time: i64 = 0;
+    let start_time = time::Instant::now();
 
     for neighborhood_type in neighborhood_types.iter() {
         for &greedy in &greedy_options {
             for (idx, solver) in solvers.iter().enumerate() {
-                let mut min_score : i64 = i64::MAX;
-                let mut max_score : i64 = i64::MIN;
-                let mut sum_score : i64 = 0;
-                for iter in 0..iterations {
-                    let (mut route, mut score, _) = solver(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), true);
-                    let (optimized_route, optimized_score) = local_search(&mut route.clone(), distance_matrix, rewards, &mut score.clone(), *neighborhood_type, greedy);
-                    let elapsed_time = start_time.elapsed().as_secs() as i64;
-                    if elapsed_time > max_found_time {
-                        max_found_time = elapsed_time;
-                    }
-                    min_score = cmp::min(min_score, optimized_score);
-                    max_score = cmp::max(max_score, optimized_score);
-                    sum_score += optimized_score;
-                    assert_eq!(optimized_score, calculate_score(&optimized_route, distance_matrix, rewards), "The calculated score does not match the expected score for method {}, neighborhood {:?}, iteration {}", methods[idx], &neighborhood_type.to_string(), iter);
-                }
-                let mut dump_filename : String = "./solutions/solution_".to_owned() + "local_search_" + &greedy.to_string() + "_"  +  &neighborhood_type.to_string() + "_" + methods[idx] + "_a_.csv";
+                let mut min_score: i64 = i64::MAX;
+                let mut max_score: i64 = i64::MIN;
+                let mut sum_score: i64 = 0;
+
+                let dump_filename: String = "./solutions/solution_".to_owned()
+                    + "local_search_"
+                    + &greedy.to_string()
+                    + "_"
+                    + &neighborhood_type.to_string()
+                    + "_"
+                    + methods[idx]
+                    + "_a_.csv";
+
                 let mut file = fs::File::options()
                     .append(true)
                     .create(true)
                     .open(dump_filename)
                     .expect("Failed to open or create the file");
 
-                writeln!(&mut file, "average;min_score;max_score").expect("Failed to write header to file");
-                writeln!(&mut file, "{};{};{}", sum_score / iterations as i64, min_score, max_score).expect("Failed to write to file");
+                writeln!(&mut file, "iteration;score").unwrap();
+
+                for iter in 0..iterations {
+                    let (mut route, mut score, _) =
+                        solver(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), true);
+
+                    let (optimized_route, optimized_score) = local_search(
+                        &mut route.clone(),
+                        distance_matrix,
+                        rewards,
+                        &mut score.clone(),
+                        *neighborhood_type,
+                        greedy,
+                    );
+
+                    let elapsed_time = start_time.elapsed().as_secs() as i64;
+                    if elapsed_time > max_found_time {
+                        max_found_time = elapsed_time;
+                    }
+
+                    min_score = cmp::min(min_score, optimized_score);
+                    max_score = cmp::max(max_score, optimized_score);
+                    sum_score += optimized_score;
+
+                    writeln!(&mut file, "{};{}", iter, optimized_score).unwrap();
+
+                    assert_eq!(
+                        optimized_score,
+                        calculate_score(&optimized_route, distance_matrix, rewards),
+                        "The calculated score does not match the expected score for method {}, neighborhood {:?}, iteration {}",
+                        methods[idx],
+                        &neighborhood_type.to_string(),
+                        iter
+                    );
+                }
+
+                writeln!(&mut file, "average;min_score;max_score").unwrap();
+                writeln!(
+                    &mut file,
+                    "{};{};{}",
+                    sum_score / iterations as i64,
+                    min_score,
+                    max_score
+                )
+                .unwrap();
             }
         }
     }
+
     for neighborhood_type in neighborhood_types.iter() {
         for (idx, solver) in solvers.iter().enumerate() {
-                let mut min_score : i64 = i64::MAX;
-                let mut max_score : i64 = i64::MIN;
-                let mut sum_score : i64 = 0;
-                for iter in 0..iterations {
-                    let (mut route, mut score, _) = solver(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), true);
-                    let (optimized_route, optimized_score) = random_search(&mut route.clone(), distance_matrix, rewards, &mut score.clone(), *neighborhood_type, max_found_time);
-                    min_score = min_score.min(optimized_score);
-                    max_score = max_score.max(optimized_score);
-                    sum_score += optimized_score;
-                    assert_eq!(optimized_score, calculate_score(&optimized_route, distance_matrix, rewards), "The calculated score does not match the expected score for method {}, neighborhood {:?}, iteration {}", methods[idx], &neighborhood_type.to_string(), iter);
-                }
-                let mut dump_filename : String = "./solutions/solution_".to_owned() + "random_search_" + &neighborhood_type.to_string() + "_" + methods[idx] + "_a_.csv";
-                let mut file = fs::File::options()
-                    .append(true)
-                    .create(true)
-                    .open(dump_filename)
-                    .expect("Failed to open or create the file");
-                writeln!(&mut file, "average;min_score;max_score").expect("Failed to write header to file");
-                writeln!(&mut file, "{};{};{}", sum_score / iterations as i64, min_score, max_score).expect("Failed to write to file");
+            let mut min_score: i64 = i64::MAX;
+            let mut max_score: i64 = i64::MIN;
+            let mut sum_score: i64 = 0;
+
+            let dump_filename: String = "./solutions/solution_".to_owned()
+                + "random_search_"
+                + &neighborhood_type.to_string()
+                + "_"
+                + methods[idx]
+                + "_a_.csv";
+
+            let mut file = fs::File::options()
+                .append(true)
+                .create(true)
+                .open(dump_filename)
+                .expect("Failed to open or create the file");
+
+            writeln!(&mut file, "iteration;score").unwrap();
+
+            for iter in 0..iterations {
+                let (mut route, mut score, _) =
+                    solver(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), true);
+
+                let (optimized_route, optimized_score) = random_search(
+                    &mut route.clone(),
+                    distance_matrix,
+                    rewards,
+                    &mut score.clone(),
+                    *neighborhood_type,
+                    max_found_time,
+                );
+
+                min_score = min_score.min(optimized_score);
+                max_score = max_score.max(optimized_score);
+                sum_score += optimized_score;
+
+                writeln!(&mut file, "{};{}", iter, optimized_score).unwrap();
+
+                assert_eq!(
+                    optimized_score,
+                    calculate_score(&optimized_route, distance_matrix, rewards),
+                    "The calculated score does not match the expected score for method {}, neighborhood {:?}, iteration {}",
+                    methods[idx],
+                    &neighborhood_type.to_string(),
+                    iter
+                );
+            }
+
+            writeln!(&mut file, "average;min_score;max_score").unwrap();
+            writeln!(
+                &mut file,
+                "{};{};{}",
+                sum_score / iterations as i64,
+                min_score,
+                max_score
+            )
+            .unwrap();
         }
     }
 }
