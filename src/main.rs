@@ -1,10 +1,19 @@
 use std::any::Any;
+use std::collections::HashMap;
 use std::{env, vec};
 use std::error::Error;
 use std::fs;
 use std::io::Write;
 use rand::Rng;
 use rand::seq::{IteratorRandom, SliceRandom};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Move {
+    ExtInsert { node: usize, after_idx: usize },
+    ExtRemove { idx: usize },
+    IntVertexSwap { idx1: usize, idx2: usize },
+    IntEdgeSwap { reverse_start: usize, reverse_end: usize },
+}
 
 fn read_csv_mapped(file_path: &str) -> Result<Vec<Vec<f64>>, Box<dyn Error>>{
     let     content : String        = fs::read_to_string(file_path)?;
@@ -419,7 +428,7 @@ fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
             (i, score, length)
         }).collect();
 
-        let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + ".csv";
+        let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + "_b_.csv";
         let mut file = fs::File::options()
             .append(true)
             .create(true)
@@ -433,6 +442,109 @@ fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     }
 
 
+}
+
+fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> HashMap<Move, i64> {
+    let mut neighborhood : HashMap<Move, i64> = HashMap::new();
+    for i in 0..route.len() {
+        let prev        : usize = route[(i + route.len() - 1) % route.len()];
+        let current     : usize = route[i];
+        let next        : usize = route[(i + 1) % route.len()];
+        let delta_score : i64   = distance_matrix[prev][current] + distance_matrix[current][next] - distance_matrix[prev][next] - rewards[current];
+        neighborhood.insert(Move::ExtRemove { idx: i }, delta_score);
+    }
+
+    let missing_nodes : Vec<usize> = (0..distance_matrix.len()).filter(|&x| !route.contains(&x)).collect();
+    for &node in &missing_nodes {
+        for i in 0..route.len() {
+            let prev        : usize = route[i];
+            let next        : usize = route[(i + 1) % route.len()];
+            let delta_score : i64   = rewards[node] - distance_matrix[prev][node] - distance_matrix[node][next] + distance_matrix[prev][next];
+            neighborhood.insert(Move::ExtInsert { node, after_idx: (i + 1) % route.len() }, delta_score);
+        }
+    }
+
+    for i in 0..route.len() {
+        for j in (i + 2)..route.len() {
+            if i == 0 && j == route.len() - 1 { continue; }
+
+            let node1 : usize = route[i];
+            let node2 : usize = route[j];
+
+            let prev1 : usize = route[(i + route.len() - 1) % route.len()];
+            let prev2 : usize = route[(j + route.len() - 1) % route.len()];
+
+            let next1 : usize = route[(i + 1) % route.len()];
+            let next2 : usize = route[(j + 1) % route.len()];
+
+            let delta_score : i64 = distance_matrix[prev1][node1] + distance_matrix[node1][next1] 
+                                  + distance_matrix[prev2][node2] + distance_matrix[node2][next2]
+                                  - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
+                                  - distance_matrix[prev2][node1] - distance_matrix[node1][next2];
+
+            neighborhood.insert(Move::IntVertexSwap { idx1: i, idx2: j }, delta_score);
+        }
+    }
+
+    for i in 0..route.len() {
+        for j in (i + 2)..route.len() {
+            if i == 0 && j == route.len() - 1 { continue; }
+
+            let edge1_src = route[i];
+            let edge1_dst = route[(i + 1) % route.len()];
+            let edge2_src = route[j];
+            let edge2_dst = route[(j + 1) % route.len()];
+
+            let delta_score = distance_matrix[edge1_src][edge1_dst] + distance_matrix[edge2_src][edge2_dst]
+                                 - distance_matrix[edge1_src][edge2_src] - distance_matrix[edge1_dst][edge2_dst];
+
+            neighborhood.insert(Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j }, delta_score);
+        }
+    }
+
+    neighborhood
+}
+
+fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, score: &mut i64, greedy: bool) -> (Vec<usize>, i64) {
+    let mut rng = rand::thread_rng();
+    let mut improved: bool = true;
+    
+    while improved {
+        let neighborhood = initialize_neighborhood(route, distance_matrix, rewards);
+        improved = false;
+
+        let best_option = if greedy {
+            neighborhood.iter()
+                .filter(|&(_, &delta_score)| delta_score > 0)
+                .choose(&mut rand::thread_rng())
+        } else {
+            neighborhood.iter().max_by_key(|&(_, delta_score)| *delta_score)
+        };
+
+        if let Some((&best_move, &delta_score)) = best_option {
+            if delta_score > 0 {
+                *score += delta_score;
+                improved = true;
+
+                match best_move {
+                    Move::ExtInsert { node, after_idx } => {
+                        route.insert(after_idx + 1, node);
+                    },
+                    Move::ExtRemove { idx } => {
+                        route.remove(idx);
+                    },
+                    Move::IntVertexSwap { idx1, idx2 } => {
+                        route.swap(idx1, idx2);
+                    },
+                    Move::IntEdgeSwap { reverse_start, reverse_end } => {
+                        route[reverse_start..=reverse_end].reverse();
+                    }
+                }
+            }
+        }
+    }
+    
+    (route.clone(), *score)
 }
 
 fn main() {
@@ -468,58 +580,16 @@ fn main() {
         distance_matrix = (read_result.unwrap()).into_iter().map(|row| row.into_iter().map(|value| value as i64).collect()).collect();
     }
 
-    run_tests(&distance_matrix, &rewards);
+    // run_tests(&distance_matrix, &rewards);
 
-    // let mut rng = rand::thread_rng();
+    let mut rng = rand::thread_rng();
 
-    // let     num_points   : u64        = rng.gen_range(2..distance_matrix.len() as u64); 
-    // let     visit_subset : Vec<usize> = (0..distance_matrix.len()).choose_multiple(&mut rng, num_points as usize);
+    let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
 
-    // println!("Distance matrix: {:?}", rewards);
-    // let (random_solution, random_score) = solve_random(&distance_matrix, &rewards, &visit_subset);
-    // let (greedy_nn_solution, greedy_nn_score) = solve_greedy_nn(&distance_matrix, &rewards, &visit_subset);
-    // let (greedy_nna_solution, greedy_nna_score) = solve_greedy_nna(&distance_matrix, &rewards, &visit_subset);
-    // let (greedy_gc_solution, greedy_gc_score) = solve_greedy_gc(&distance_matrix, &rewards, &visit_subset);
-    // let (greedy_gca_solution, greedy_gca_score) = solve_greedy_gca(&distance_matrix, &rewards, &visit_subset);
-    // let (regret_solution, regret_score) = solve_2_regret(&distance_matrix, &rewards, &visit_subset);
-    // let (regret_weighted_solution, regret_weighted_score) = solve_2_regret_weighted(&distance_matrix, &rewards, &visit_subset, -1.5, 1.5);
+    visit_subset.shuffle(&mut rng);
 
-    // let calculated_score = calculate_score(&random_solution, &distance_matrix, &rewards);
-    // let calculated_score_greedy_nna = calculate_score(&greedy_nna_solution, &distance_matrix, &rewards);
-    // let calculated_score_greedy_nn = calculate_score(&greedy_nn_solution, &distance_matrix, &rewards);
-    // let calculated_score_greedy_gc = calculate_score(&greedy_gc_solution, &distance_matrix, &rewards);
-    // let calculated_score_greedy_gca = calculate_score(&greedy_gca_solution, &distance_matrix, &rewards);
-    // let calculated_score_regret = calculate_score(&regret_solution, &distance_matrix, &rewards);
-    // let calculated_score_regret_weighted = calculate_score(&regret_weighted_solution, &distance_matrix, &rewards);
-
-    // assert_eq!(random_score, calculated_score, "The calculated score does not match the expected score.");
-    // assert_eq!(greedy_nna_score, calculated_score_greedy_nna, "The calculated score for the greedy nna solution does not match the expected score.");
-    // assert_eq!(greedy_nn_score, calculated_score_greedy_nn, "The calculated score for the greedy nn solution does not match the expected score.");
-    // assert_eq!(greedy_gc_score, calculated_score_greedy_gc, "The calculated score for the greedy gc solution does not match the expected score.");
-    // assert_eq!(greedy_gca_score, calculated_score_greedy_gca, "The calculated score for the greedy gca solution does not match the expected score.");
-    // assert_eq!(regret_score, calculated_score_regret, "The calculated score for the regret solution does not match the expected score.");
-    // assert_eq!(regret_weighted_score, calculated_score_regret_weighted, "The calculated score for the weighted regret solution does not match the expected score.");
-
-    // println!("Random solution: {:?} with score: {}", random_solution, random_score);
-    // println!("Greedy nn solution: {:?} with score: {}", greedy_nn_solution, greedy_nn_score);
-    // println!("Greedy nna solution: {:?} with score: {}", greedy_nna_solution, greedy_nna_score);
-    // println!("Greedy gc solution: {:?} with score: {}", greedy_gc_solution, greedy_gc_score);
-    // println!("Greedy gca solution: {:?} with score: {}", greedy_gca_solution, greedy_gca_score);
-    // println!("Regret solution: {:?} with score: {}", regret_solution, regret_score);
-    // println!("Regret weighted solution: {:?} with score: {}", regret_weighted_solution, regret_weighted_score);
-
-    // let mut dump_filename = "solution_dump_random.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &random_solution, random_score);
-    // dump_filename = "solution_dump_greedy_nn.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_nn_solution, greedy_nn_score);
-    // dump_filename = "solution_dump_greedy_nna.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_nna_solution, greedy_nna_score);
-    // dump_filename = "solution_dump_greedy_gc.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_gc_solution, greedy_gc_score);
-    // dump_filename = "solution_dump_greedy_gca.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &greedy_gca_solution, greedy_gca_score);
-    // dump_filename = "solution_dump_regret.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &regret_solution, regret_score);
-    // dump_filename = "solution_dump_regret_weighted.csv";
-    // dump_solution(dump_filename, &distance_matrix, &rewards, &regret_weighted_solution, regret_weighted_score);
+    let (route, score, length) = solve_2_regret(&distance_matrix, &rewards, &visit_subset, false);
+    println!("Initial route: {:?}, Score: {}, Length: {}", route, score, length);
+    let (optimized_route, optimized_score) = local_search(&mut route.clone(), &distance_matrix, &rewards, &mut score.clone(), false);
+    println!("Optimized route: {:?}, Score: {}", optimized_route, optimized_score);
 }
