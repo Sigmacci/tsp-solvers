@@ -470,7 +470,11 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
         let prev        : usize = route[(i + route.len() - 1) % route.len()];
         let current     : usize = route[i];
         let next        : usize = route[(i + 1) % route.len()];
-        let delta_score : i64   = distance_matrix[prev][current] + distance_matrix[current][next] - distance_matrix[prev][next] - rewards[current];
+        let delta_score : i64 = 
+            - rewards[current] 
+            + distance_matrix[prev][current] 
+            + distance_matrix[current][next] 
+            - distance_matrix[prev][next];
         neighborhood.insert(Move::ExtRemove { idx: i }, delta_score);
     }
 
@@ -487,6 +491,7 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
         for i in 0..route.len() {
             for j in (i + 2)..route.len() {
                 if i == 0 && j == route.len() - 1 { continue; }
+                if j == i + 1 { continue; }
 
                 let node1 : usize = route[i];
                 let node2 : usize = route[j];
@@ -496,6 +501,8 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
 
                 let next1 : usize = route[(i + 1) % route.len()];
                 let next2 : usize = route[(j + 1) % route.len()];
+
+                
 
                 let delta_score : i64 = distance_matrix[prev1][node1] + distance_matrix[node1][next1] 
                                     + distance_matrix[prev2][node2] + distance_matrix[node2][next2]
@@ -529,8 +536,9 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
 fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, score: &mut i64, neighborhood_type: NeighborhoodType, greedy: bool) -> (Vec<usize>, i64) {
     let mut rng = rand::thread_rng();
     let mut improved: bool = true;
-    
+    let mut last_score = *score;
     while improved {
+        //println!("I am actually working, route: {:?}, score: {}, last_score: {}", route, score, last_score);
         let neighborhood = initialize_neighborhood(route, distance_matrix, rewards, neighborhood_type);
         improved = false;
 
@@ -539,17 +547,20 @@ fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards
                 .filter(|&(_, &delta_score)| delta_score > 0)
                 .choose(&mut rand::thread_rng())
         } else {
-            neighborhood.iter().max_by_key(|&(_, delta_score)| *delta_score)
+            neighborhood.iter().filter(|&(_, &delta_score)| delta_score > 0).max_by_key(|&(_, delta_score)| *delta_score)
         };
 
         if let Some((&best_move, &delta_score)) = best_option {
             if delta_score > 0 {
                 *score += delta_score;
+                if *score <= last_score {
+                    break;
+                }
+                last_score = *score;
                 improved = true;
-
                 match best_move {
                     Move::ExtInsert { node, after_idx } => {
-                        route.insert(after_idx + 1, node);
+                        route.insert(after_idx , node);
                     },
                     Move::ExtRemove { idx } => {
                         route.remove(idx);
@@ -571,33 +582,39 @@ fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards
 fn random_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, score: &mut i64, neighborhood_type: NeighborhoodType, time_limit: i64) -> (Vec<usize>, i64) {
     let start_time = time::Instant::now();
     let mut rng = rand::thread_rng();
-    while start_time.elapsed().as_secs() < time_limit as u64 {
+    let mut best_route = route.clone();
+    let mut best_score = *score;
+    while start_time.elapsed().as_millis() < time_limit as u128 {
         let neighborhood = initialize_neighborhood(route, distance_matrix, rewards, neighborhood_type);
         if neighborhood.is_empty() { break; }
         let (&random_move, &delta_score) = neighborhood.iter().choose(&mut rng).unwrap();
-        if delta_score > 0 {
-            *score += delta_score;
-            match random_move {
-                Move::ExtInsert { node, after_idx } => {
-                    route.insert(after_idx + 1, node);
-                },
-                Move::ExtRemove { idx } => {
-                    route.remove(idx);
-                },
-                Move::IntVertexSwap { idx1, idx2 } => {
-                    route.swap(idx1, idx2);
-                },
-                Move::IntEdgeSwap { reverse_start, reverse_end } => {
-                    route[reverse_start..=reverse_end].reverse();
-                }
+        // Always make the move (random walk)
+        *score += delta_score;
+        match random_move {
+            Move::ExtInsert { node, after_idx } => {
+                route.insert(after_idx, node);
+            },
+            Move::ExtRemove { idx } => {
+                route.remove(idx);
+            },
+            Move::IntVertexSwap { idx1, idx2 } => {
+                route.swap(idx1, idx2);
+            },
+            Move::IntEdgeSwap { reverse_start, reverse_end } => {
+                route[reverse_start..=reverse_end].reverse();
             }
         }
+        if *score > best_score {
+            best_score = *score;
+            best_route = route.clone();
+        }
     }
-    (route.clone(), *score)
+    (best_route, best_score)
 }
 
 fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterations: usize) {
     let mut rng = rand::thread_rng();
+
     let neighborhood_types = vec![NeighborhoodType::VertexSwap, NeighborhoodType::EdgeSwap];
     let greedy_options = vec![true, false];
     let solvers: Vec<fn(&Vec<Vec<i64>>, &Vec<i64>, &Vec<usize>, bool) -> (Vec<usize>, i64, i64)> = vec![
@@ -609,8 +626,11 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
         "2_regret",
     ];
 
+    let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
+    
+    visit_subset.shuffle(&mut rng);
+    let mut best_solution : Option<(Vec<usize>, i64)> = None;
     let mut max_found_time: i64 = 0;
-    let start_time = time::Instant::now();
 
     for neighborhood_type in neighborhood_types.iter() {
         for &greedy in &greedy_options {
@@ -618,6 +638,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 let mut min_score: i64 = i64::MAX;
                 let mut max_score: i64 = i64::MIN;
                 let mut sum_score: i64 = 0;
+                let mut times: Vec<i64> = Vec::with_capacity(iterations);
 
                 let dump_filename: String = "./solutions/solution_".to_owned()
                     + "local_search_"
@@ -626,7 +647,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     + &neighborhood_type.to_string()
                     + "_"
                     + methods[idx]
-                    + "_a_.csv";
+                    + "_b_.csv";
 
                 let mut file = fs::File::options()
                     .append(true)
@@ -637,26 +658,31 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 writeln!(&mut file, "iteration;score").unwrap();
 
                 for iter in 0..iterations {
+                    visit_subset.shuffle(&mut rng);
                     let (mut route, mut score, _) =
-                        solver(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), true);
+                        solver(&distance_matrix, &rewards, &visit_subset, true);
 
+                    let iter_start_time = time::Instant::now();
                     let (optimized_route, optimized_score) = local_search(
                         &mut route.clone(),
-                        distance_matrix,
-                        rewards,
+                        &distance_matrix,
+                        &rewards,
                         &mut score.clone(),
                         *neighborhood_type,
                         greedy,
                     );
-
-                    let elapsed_time = start_time.elapsed().as_secs() as i64;
-                    if elapsed_time > max_found_time {
-                        max_found_time = elapsed_time;
+                    let iter_elapsed_time = iter_start_time.elapsed().as_millis() as i64;
+                    times.push(iter_elapsed_time);
+                    if iter_elapsed_time > max_found_time {
+                        max_found_time = iter_elapsed_time;
                     }
 
                     min_score = cmp::min(min_score, optimized_score);
                     max_score = cmp::max(max_score, optimized_score);
                     sum_score += optimized_score;
+                    if (optimized_score == max_score) {
+                        best_solution = Some((optimized_route.clone(), optimized_score));
+                    }
 
                     writeln!(&mut file, "{};{}", iter, optimized_score).unwrap();
 
@@ -670,15 +696,25 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     );
                 }
 
-                writeln!(&mut file, "average;min_score;max_score").unwrap();
+                // Time statistics (milliseconds)
+                let min_time = times.iter().min().cloned().unwrap_or(0);
+                let max_time = times.iter().max().cloned().unwrap_or(0);
+                let avg_time = if !times.is_empty() {
+                    times.iter().sum::<i64>() / times.len() as i64
+                } else { 0 };
+
+                writeln!(&mut file, "average;min_score;max_score;min_time_ms;max_time_ms;avg_time_ms").unwrap();
                 writeln!(
                     &mut file,
-                    "{};{};{}",
+                    "{};{};{};{};{};{}",
                     sum_score / iterations as i64,
                     min_score,
-                    max_score
-                )
-                .unwrap();
+                    max_score,
+                    min_time,
+                    max_time,
+                    avg_time
+                ).unwrap();
+                writeln!(&mut file, "best_solution;{:?}", best_solution.clone().unwrap());
             }
         }
     }
@@ -688,13 +724,14 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
             let mut min_score: i64 = i64::MAX;
             let mut max_score: i64 = i64::MIN;
             let mut sum_score: i64 = 0;
+            let mut times: Vec<i64> = Vec::with_capacity(iterations);
 
             let dump_filename: String = "./solutions/solution_".to_owned()
                 + "random_search_"
                 + &neighborhood_type.to_string()
                 + "_"
                 + methods[idx]
-                + "_a_.csv";
+                + "_b_.csv";
 
             let mut file = fs::File::options()
                 .append(true)
@@ -705,9 +742,11 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
             writeln!(&mut file, "iteration;score").unwrap();
 
             for iter in 0..iterations {
+                visit_subset.shuffle(&mut rng);
                 let (mut route, mut score, _) =
-                    solver(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), true);
+                    solver(distance_matrix, rewards, &visit_subset, true);
 
+                let iter_start_time = time::Instant::now();
                 let (optimized_route, optimized_score) = random_search(
                     &mut route.clone(),
                     distance_matrix,
@@ -716,10 +755,15 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     *neighborhood_type,
                     max_found_time,
                 );
+                let iter_elapsed_time = iter_start_time.elapsed().as_millis() as i64;
+                times.push(iter_elapsed_time);
 
                 min_score = min_score.min(optimized_score);
                 max_score = max_score.max(optimized_score);
                 sum_score += optimized_score;
+                if (optimized_score == max_score) {
+                    best_solution = Some((optimized_route.clone(), optimized_score));
+                }
 
                 writeln!(&mut file, "{};{}", iter, optimized_score).unwrap();
 
@@ -733,15 +777,25 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 );
             }
 
-            writeln!(&mut file, "average;min_score;max_score").unwrap();
+            // Time statistics (milliseconds)
+            let min_time = times.iter().min().cloned().unwrap_or(0);
+            let max_time = times.iter().max().cloned().unwrap_or(0);
+            let avg_time = if !times.is_empty() {
+                times.iter().sum::<i64>() / times.len() as i64
+            } else { 0 };
+
+            writeln!(&mut file, "average;min_score;max_score;min_time_ms;max_time_ms;avg_time_ms").unwrap();
             writeln!(
                 &mut file,
-                "{};{};{}",
+                "{};{};{};{};{};{}",
                 sum_score / iterations as i64,
                 min_score,
-                max_score
-            )
-            .unwrap();
+                max_score,
+                min_time,
+                max_time,
+                avg_time
+            ).unwrap();
+            writeln!(&mut file, "best_solution;{:?}", best_solution.clone().unwrap());
         }
     }
 }
@@ -786,19 +840,16 @@ fn main() {
     // let mut max_time : i64 = 0;
 
     // let mut start_time = time::Instant::now();
-
     // let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
-    
     // visit_subset.shuffle(&mut rng);
-
     // let (route, score, length) = solve_2_regret(&distance_matrix, &rewards, &visit_subset, false);
     // println!("Initial route: {:?}, Score: {}, Length: {}", route, score, length);
     // start_time = time::Instant::now();
     // let (optimized_route, optimized_score) = local_search(&mut route.clone(), &distance_matrix, &rewards, &mut score.clone(), false, NeighborhoodType::VertexSwap);
-    // if start_time.elapsed().as_secs() > max_time as u64 {
-    //     max_time = start_time.elapsed().as_secs() as i64;
+    // if start_time.elapsed().as_millis() > max_time as u128 {
+    //     max_time = start_time.elapsed().as_millis() as i64;
     // }
     // println!("Optimized route: {:?}, Score: {}", optimized_route, optimized_score);
 
-    run_search_tests(&distance_matrix, &rewards, 10);
+    run_search_tests(&distance_matrix, &rewards, 100);
 }
