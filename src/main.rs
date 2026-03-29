@@ -448,7 +448,7 @@ fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
             (i, score, length)
         }).collect();
 
-        let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + "_b_.csv";
+        let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + "_a_.csv";
         let mut file = fs::File::options()
             .append(true)
             .create(true)
@@ -647,7 +647,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     + &neighborhood_type.to_string()
                     + "_"
                     + methods[idx]
-                    + "_b_.csv";
+                    + "_a_.csv";
 
                 let mut file = fs::File::options()
                     .append(true)
@@ -731,7 +731,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 + &neighborhood_type.to_string()
                 + "_"
                 + methods[idx]
-                + "_b_.csv";
+                + "_a_.csv";
 
             let mut file = fs::File::options()
                 .append(true)
