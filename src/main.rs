@@ -502,12 +502,14 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
                 let next1 : usize = route[(i + 1) % route.len()];
                 let next2 : usize = route[(j + 1) % route.len()];
 
-                
-
-                let delta_score : i64 = distance_matrix[prev1][node1] + distance_matrix[node1][next1] 
-                                    + distance_matrix[prev2][node2] + distance_matrix[node2][next2]
-                                    - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
-                                    - distance_matrix[prev2][node1] - distance_matrix[node1][next2];
+                // Calculate delta including rewards
+                let old_score = rewards[node1] + rewards[node2]
+                    - distance_matrix[prev1][node1] - distance_matrix[node1][next1]
+                    - distance_matrix[prev2][node2] - distance_matrix[node2][next2];
+                let new_score = rewards[node2] + rewards[node1]
+                    - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
+                    - distance_matrix[prev2][node1] - distance_matrix[node1][next2];
+                let delta_score = new_score - old_score;
 
                 neighborhood.insert(Move::IntVertexSwap { idx1: i, idx2: j }, delta_score);
             }
@@ -522,8 +524,26 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
                 let edge2_src = route[j];
                 let edge2_dst = route[(j + 1) % route.len()];
 
-                let delta_score = distance_matrix[edge1_src][edge1_dst] + distance_matrix[edge2_src][edge2_dst]
-                                    - distance_matrix[edge1_src][edge2_src] - distance_matrix[edge1_dst][edge2_dst];
+                let mut old_score = 0;
+                let mut new_score = 0;
+
+                for k in (i + 1)..=j {
+                    old_score += rewards[route[k]];
+                    old_score -= distance_matrix[route[k - 1]][route[k]];
+                }
+                old_score -= distance_matrix[edge2_src][edge2_dst];
+
+                for k in (i + 1..=j).rev() {
+                    new_score += rewards[route[k]];
+                    if k == (i + 1) {
+                        new_score -= distance_matrix[edge1_src][route[j]];
+                    } else {
+                        new_score -= distance_matrix[route[k]][route[k - 1]];
+                    }
+                }
+                new_score -= distance_matrix[route[i + 1]][edge2_dst];
+
+                let delta_score = new_score - old_score;
 
                 neighborhood.insert(Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j }, delta_score);
             }
@@ -588,7 +608,6 @@ fn random_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, reward
         let neighborhood = initialize_neighborhood(route, distance_matrix, rewards, neighborhood_type);
         if neighborhood.is_empty() { break; }
         let (&random_move, &delta_score) = neighborhood.iter().choose(&mut rng).unwrap();
-        // Always make the move (random walk)
         *score += delta_score;
         match random_move {
             Move::ExtInsert { node, after_idx } => {
@@ -655,7 +674,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     .open(dump_filename)
                     .expect("Failed to open or create the file");
 
-                writeln!(&mut file, "iteration;score").unwrap();
+                writeln!(&mut file, "iteration,score").unwrap();
 
                 for iter in 0..iterations {
                     visit_subset.shuffle(&mut rng);
@@ -684,7 +703,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                         best_solution = Some((optimized_route.clone(), optimized_score));
                     }
 
-                    writeln!(&mut file, "{};{}", iter, optimized_score).unwrap();
+                    writeln!(&mut file, "{},{}", iter, optimized_score).unwrap();
 
                     assert_eq!(
                         optimized_score,
@@ -703,10 +722,10 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     times.iter().sum::<i64>() / times.len() as i64
                 } else { 0 };
 
-                writeln!(&mut file, "average;min_score;max_score;min_time_ms;max_time_ms;avg_time_ms").unwrap();
+                writeln!(&mut file, "average,min_score,max_score,min_time_ms,max_time_ms,avg_time_ms").unwrap();
                 writeln!(
                     &mut file,
-                    "{};{};{};{};{};{}",
+                    "{},{},{},{},{},{}",
                     sum_score / iterations as i64,
                     min_score,
                     max_score,
@@ -714,7 +733,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     max_time,
                     avg_time
                 ).unwrap();
-                writeln!(&mut file, "best_solution;{:?}", best_solution.clone().unwrap());
+                writeln!(&mut file, "best_solution,{:?}", best_solution.clone().unwrap());
             }
         }
     }
@@ -739,7 +758,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 .open(dump_filename)
                 .expect("Failed to open or create the file");
 
-            writeln!(&mut file, "iteration;score").unwrap();
+            writeln!(&mut file, "iteration,score").unwrap();
 
             for iter in 0..iterations {
                 visit_subset.shuffle(&mut rng);
@@ -765,7 +784,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     best_solution = Some((optimized_route.clone(), optimized_score));
                 }
 
-                writeln!(&mut file, "{};{}", iter, optimized_score).unwrap();
+                writeln!(&mut file, "{},{}", iter, optimized_score).unwrap();
 
                 assert_eq!(
                     optimized_score,
@@ -784,10 +803,10 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 times.iter().sum::<i64>() / times.len() as i64
             } else { 0 };
 
-            writeln!(&mut file, "average;min_score;max_score;min_time_ms;max_time_ms;avg_time_ms").unwrap();
+            writeln!(&mut file, "average,min_score,max_score,min_time_ms,max_time_ms,avg_time_ms").unwrap();
             writeln!(
                 &mut file,
-                "{};{};{};{};{};{}",
+                "{},{},{},{},{},{}",
                 sum_score / iterations as i64,
                 min_score,
                 max_score,
@@ -795,7 +814,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 max_time,
                 avg_time
             ).unwrap();
-            writeln!(&mut file, "best_solution;{:?}", best_solution.clone().unwrap());
+            writeln!(&mut file, "best_solution,{:?}", best_solution.clone().unwrap());
         }
     }
 }
