@@ -573,9 +573,6 @@ fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards
         if let Some((&best_move, &delta_score)) = best_option {
             if delta_score > 0 {
                 *score += delta_score;
-                if *score <= last_score {
-                    break;
-                }
                 last_score = *score;
                 improved = true;
                 match best_move {
@@ -648,7 +645,6 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
     let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
     
     visit_subset.shuffle(&mut rng);
-    let mut best_solution : Option<(Vec<usize>, i64)> = None;
     let mut max_found_time: i64 = 0;
 
     for neighborhood_type in neighborhood_types.iter() {
@@ -656,6 +652,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
             for (idx, solver) in solvers.iter().enumerate() {
                 let mut min_score: i64 = i64::MAX;
                 let mut max_score: i64 = i64::MIN;
+                let mut best_solution : Option<(Vec<usize>, i64)> = None;
                 let mut sum_score: i64 = 0;
                 let mut times: Vec<i64> = Vec::with_capacity(iterations);
 
@@ -733,6 +730,9 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     max_time,
                     avg_time
                 ).unwrap();
+                if let Some((ref best_route, best_score)) = best_solution {
+                    assert_eq!(best_score, calculate_score(best_route, &distance_matrix, &rewards), "Best solution score does not match calculated score!");
+                }
                 writeln!(&mut file, "best_solution,{:?}", best_solution.clone().unwrap());
             }
         }
@@ -742,6 +742,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
         for (idx, solver) in solvers.iter().enumerate() {
             let mut min_score: i64 = i64::MAX;
             let mut max_score: i64 = i64::MIN;
+            let mut best_solution : Option<(Vec<usize>, i64)> = None;
             let mut sum_score: i64 = 0;
             let mut times: Vec<i64> = Vec::with_capacity(iterations);
 
@@ -814,6 +815,9 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 max_time,
                 avg_time
             ).unwrap();
+            if let Some((ref best_route, best_score)) = best_solution {
+                assert_eq!(best_score, calculate_score(best_route, &distance_matrix, &rewards), "Best solution score does not match calculated score!");
+            }
             writeln!(&mut file, "best_solution,{:?}", best_solution.clone().unwrap());
         }
     }
