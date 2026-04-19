@@ -524,8 +524,7 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
                 let edge2_src = route[j];
                 let edge2_dst = route[(j + 1) % route.len()];
 
-                let delta_score = distance_matrix[edge1_src][edge1_dst] + distance_matrix[edge2_src][edge2_dst]
-                                    - distance_matrix[edge1_src][edge2_src] - distance_matrix[edge1_dst][edge2_dst];
+                let delta_score = distance_matrix[edge1_src][edge2_src] + distance_matrix[edge1_dst][edge2_dst] - distance_matrix[edge1_src][edge1_dst] - distance_matrix[edge2_src][edge2_dst];
 
                 neighborhood.insert(Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j }, delta_score);
             }
@@ -914,7 +913,7 @@ fn check_if_move_is_legal(route: &Vec<usize>, next_move: &Move) -> bool {
             !route.contains(node) && *after_idx <= route.len()
         },
         Move::ExtRemove { idx } => {
-            route.contains(&idx) && *idx < route.len()
+            *idx < route.len()
         },
         Move::IntVertexSwap { idx1, idx2 } => {
             *idx1 < route.len() && *idx2 < route.len() && idx1 != idx2
@@ -925,8 +924,72 @@ fn check_if_move_is_legal(route: &Vec<usize>, next_move: &Move) -> bool {
     }
 }
 
+fn recalculate_deltas(
+    route: &Vec<usize>,
+    moves: &[(Move, i64)],
+    distance_matrix: &Vec<Vec<i64>>,
+    rewards: &Vec<i64>,
+) -> VecDeque<(Move, i64)> {
+    let route_set: HashSet<usize> = route.iter().cloned().collect();
+    let mut updated: Vec<(Move, i64)> = moves
+        .iter()
+        .filter_map(|(m, _)| {
+            let delta = match *m {
+                Move::ExtRemove { idx } => {
+                    if idx >= route.len() { return None; }
+                    let prev    = route[(idx + route.len() - 1) % route.len()];
+                    let current = route[idx];
+                    let next    = route[(idx + 1) % route.len()];
+                    - rewards[current]
+                    + distance_matrix[prev][current]
+                    + distance_matrix[current][next]
+                    - distance_matrix[prev][next]
+                },
+                Move::ExtInsert { node, after_idx } => {
+                    if route_set.contains(&node) || after_idx > route.len() { return None; }
+                    let prev = route[(after_idx + route.len() - 1) % route.len()];
+                    let next = route[after_idx % route.len()];
+                    rewards[node]
+                    - distance_matrix[prev][node]
+                    - distance_matrix[node][next]
+                    + distance_matrix[prev][next]
+                },
+                Move::IntVertexSwap { idx1, idx2 } => {
+                    if idx1 >= route.len() || idx2 >= route.len() { return None; }
+                    let node1 = route[idx1];
+                    let node2 = route[idx2];
+                    let prev1 = route[(idx1 + route.len() - 1) % route.len()];
+                    let next1 = route[(idx1 + 1) % route.len()];
+                    let prev2 = route[(idx2 + route.len() - 1) % route.len()];
+                    let next2 = route[(idx2 + 1) % route.len()];
+                    distance_matrix[prev1][node1] + distance_matrix[node1][next1]
+                    + distance_matrix[prev2][node2] + distance_matrix[node2][next2]
+                    - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
+                    - distance_matrix[prev2][node1] - distance_matrix[node1][next2]
+                },
+                Move::IntEdgeSwap { reverse_start, reverse_end } => {
+                    if reverse_start >= route.len() || reverse_end >= route.len() { return None; }
+                    let edge1_src = route[reverse_start - 1];
+                    let edge1_dst = route[reverse_start];
+                    let edge2_src = route[reverse_end];
+                    let edge2_dst = route[(reverse_end + 1) % route.len()];
+                    distance_matrix[edge1_src][edge2_src]
+                    + distance_matrix[edge1_dst][edge2_dst]
+                    - distance_matrix[edge1_src][edge1_dst]
+                    - distance_matrix[edge2_src][edge2_dst]
+                },
+            };
+            if delta > 0 { Some((*m, delta)) } else { None }
+        })
+        .collect();
+
+    updated.sort_by_key(|&(_, d)| -d);
+    updated.into_iter().collect()
+}
+
 fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> (Vec<usize>, i64) {
     let mut current_route = route.clone();
+    let mut score = calculate_score(&current_route, distance_matrix, rewards);
     let mut lm: VecDeque<(Move, i64)> = VecDeque::new();
     let neighborhood = initialize_neighborhood(&current_route, distance_matrix, rewards, NeighborhoodType::EdgeSwap);
     let mut moves: Vec<(Move, i64)> = neighborhood
@@ -944,20 +1007,17 @@ fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: 
             let (next_move, delta_score) = lm.pop_front().unwrap();
             if check_if_move_is_legal(&current_route, &next_move) {
                 match next_move {
-                    Move::ExtInsert { node, after_idx } => {
-                        current_route.insert(after_idx, node);
-                    },
-                    Move::ExtRemove { idx } => {
-                        current_route.remove(idx);
-                    },
-                    Move::IntVertexSwap { idx1, idx2 } => {
-                        current_route.swap(idx1, idx2);
-                    },
+                    Move::ExtInsert { node, after_idx } => { current_route.insert(after_idx, node); },
+                    Move::ExtRemove { idx }             => { current_route.remove(idx); },
+                    Move::IntVertexSwap { idx1, idx2 } => { current_route.swap(idx1, idx2); },
                     Move::IntEdgeSwap { reverse_start, reverse_end } => {
                         current_route[reverse_start..=reverse_end].reverse();
                     }
                 }
                 is_applied = true;
+                score += delta_score;
+                let remaining: Vec<(Move, i64)> = lm.drain(..).collect();
+                lm = recalculate_deltas(&current_route, &remaining, distance_matrix, rewards);
                 break;
             }
         }
@@ -973,8 +1033,7 @@ fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: 
             lm.extend(new_moves.into_iter().map(|(m, d)| (m, d)));
         }
     }
-    let final_score = calculate_score(&current_route, distance_matrix, rewards);
-    (current_route, final_score)
+    (current_route, score)
 }
 
 fn run_candidate_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterations: usize) {
