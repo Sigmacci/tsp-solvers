@@ -831,7 +831,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                         solver(&distance_matrix, &rewards, &visit_subset, true);
 
                     let iter_start_time = time::Instant::now();
-                    println!("Started");
+                    //println!("Started");
                     let (optimized_route, optimized_score) = local_search(
                         &mut route.clone(),
                         &distance_matrix,
@@ -840,7 +840,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                         *neighborhood_type,
                         greedy,
                     );
-                    println!("Stuff finished");
+                    //println!("Stuff finished");
                     let iter_elapsed_time = iter_start_time.elapsed().as_millis() as i64;
                     times.push(iter_elapsed_time);
                     if iter_elapsed_time > max_found_time {
@@ -983,6 +983,7 @@ fn solve_candidate_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, re
     let mut score = calculate_score(route, distance_matrix, rewards);
     let mut current_route = route.clone();
     while found_better{
+        found_better = false;
         let n = current_route.len();
         let mut all_candidate_moves: Vec<(Move, i64)> = Vec::new();
         for i in (0..n) {
@@ -1272,29 +1273,29 @@ fn main() {
 
     // run_tests(&distance_matrix, &rewards); //old code - task 1
 
-    let mut rng = rand::thread_rng();
+    // let mut rng = rand::thread_rng();
 
-    let mut max_time : i64 = 0;
+    // let mut max_time : i64 = 0;
 
-    let mut start_time = time::Instant::now();
-    let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
-    visit_subset.shuffle(&mut rng);
-    let (route, score, length) = solve_random(&distance_matrix, &rewards, &visit_subset, false);
-    println!("Initial route: {:?}, Score: {}, Length: {}", route, score, length);
-    start_time = time::Instant::now();
-    let (optimized_route, optimized_score) = local_search(&mut route.clone(), &distance_matrix, &rewards, &mut score.clone(), NeighborhoodType::VertexSwap, false);
-    if start_time.elapsed().as_millis() > max_time as u128 {
-        max_time = start_time.elapsed().as_millis() as i64;
-    }
-    println!("Vertex optimized Score: {}", optimized_score);
-    let (optimized_route, optimized_score) = local_search(&mut route.clone(), &distance_matrix, &rewards, &mut score.clone(), NeighborhoodType::EdgeSwap, false);
-    if start_time.elapsed().as_millis() > max_time as u128 {
-        max_time = start_time.elapsed().as_millis() as i64;
-    }
-    println!("Edge optimized Score: {}", optimized_score);
+    // let mut start_time = time::Instant::now();
+    // let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
+    // visit_subset.shuffle(&mut rng);
+    // let (route, score, length) = solve_random(&distance_matrix, &rewards, &visit_subset, false);
+    // println!("Initial route: {:?}, Score: {}, Length: {}", route, score, length);
+    // start_time = time::Instant::now();
+    // let (optimized_route, optimized_score) = local_search(&mut route.clone(), &distance_matrix, &rewards, &mut score.clone(), NeighborhoodType::VertexSwap, false);
+    // if start_time.elapsed().as_millis() > max_time as u128 {
+    //     max_time = start_time.elapsed().as_millis() as i64;
+    // }
+    // println!("Vertex optimized Score: {}", optimized_score);
+    // let (optimized_route, optimized_score) = local_search(&mut route.clone(), &distance_matrix, &rewards, &mut score.clone(), NeighborhoodType::EdgeSwap, false);
+    // if start_time.elapsed().as_millis() > max_time as u128 {
+    //     max_time = start_time.elapsed().as_millis() as i64;
+    // }
+    // println!("Edge optimized Score: {}", optimized_score);
 
 
-    // run_search_tests(&distance_matrix, &rewards, 100);
-    // run_candidate_tests(&distance_matrix, &rewards, 100);
+     //run_search_tests(&distance_matrix, &rewards, 100);
+    run_candidate_tests(&distance_matrix, &rewards, 100);
 
 }
