@@ -82,7 +82,7 @@ fn solve_random(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, visit_subse
         let from = _visit_subset[i       % _visit_subset.len()] as usize;
         let to   = _visit_subset[(i + 1) % _visit_subset.len()] as usize;
 
-        total_score += rewards[to] - distance_matrix[from][to];
+        total_score += rewards[from] - distance_matrix[from][to];
         total_length += distance_matrix[from][to];
     }
 
@@ -486,7 +486,7 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
             let prev        : usize = route[i];
             let next        : usize = route[(i + 1) % route.len()];
             let delta_score : i64   = rewards[node] - distance_matrix[prev][node] - distance_matrix[node][next] + distance_matrix[prev][next];
-            neighborhood.insert(Move::ExtInsert { node, after_idx: (i + 1) % route.len() }, delta_score);
+            neighborhood.insert(Move::ExtInsert { node, after_idx: (i + 1) }, delta_score);
         }
     }
     if neighborhood_type == NeighborhoodType::VertexSwap {
@@ -526,7 +526,7 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
 
                 let delta_score = distance_matrix[edge1_src][edge2_src] + distance_matrix[edge1_dst][edge2_dst] - distance_matrix[edge1_src][edge1_dst] - distance_matrix[edge2_src][edge2_dst];
 
-                neighborhood.insert(Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j }, delta_score);
+                neighborhood.insert(Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j }, delta_score*-1);
             }
         }
     }
@@ -968,16 +968,15 @@ fn recalculate_deltas(
                     - distance_matrix[prev2][node1] - distance_matrix[node1][next2]
                 },
                 Move::IntEdgeSwap { reverse_start, reverse_end } => {
-                    if reverse_start >= route.len() || reverse_end >= route.len() { return None; }
-                    let edge1_src = route[reverse_start - 1];
-                    let edge1_dst = route[reverse_start];
-                    let edge2_src = route[reverse_end];
-                    let edge2_dst = route[(reverse_end + 1) % route.len()];
-                    distance_matrix[edge1_src][edge2_src]
-                    + distance_matrix[edge1_dst][edge2_dst]
-                    - distance_matrix[edge1_src][edge1_dst]
-                    - distance_matrix[edge2_src][edge2_dst]
-                },
+                if reverse_start >= route.len() || reverse_end >= route.len() { return None; }
+                let n = route.len();
+                let edge1_src = route[(reverse_start + n - 1) % n]; 
+                let edge1_dst = route[reverse_start];
+                let edge2_src = route[reverse_end];
+                let edge2_dst = route[(reverse_end + 1) % n];
+                distance_matrix[edge1_src][edge1_dst] + distance_matrix[edge2_src][edge2_dst]
+                - (distance_matrix[edge1_src][edge2_src] + distance_matrix[edge1_dst][edge2_dst])
+            },
             };
             if delta > 0 { Some((*m, delta)) } else { None }
         })
@@ -1064,6 +1063,7 @@ fn run_candidate_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iter
 
         for iter in 0..iterations {
             let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
+            visit_subset.shuffle(&mut rng);
             let (route, _, _) = solve_random(&distance_matrix, &rewards, &visit_subset, true);
             let start_time = Instant::now();
             let (sol, score) = solver(&route, distance_matrix, rewards);
@@ -1148,7 +1148,7 @@ fn main() {
     // }
     // println!("Optimized route: {:?}, Score: {}", optimized_route, optimized_score);
 
-    // run_search_tests(&distance_matrix, &rewards, 100);
-    run_candidate_tests(&distance_matrix, &rewards, 100);
+    run_search_tests(&distance_matrix, &rewards, 100);
+    //run_candidate_tests(&distance_matrix, &rewards, 100);
 
 }
