@@ -964,11 +964,12 @@ fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: 
         if !is_applied {
             lm.clear();
             let new_neighborhood = initialize_neighborhood(&current_route, distance_matrix, rewards, NeighborhoodType::EdgeSwap);
-            let new_moves: Vec<(Move, i64)> = new_neighborhood
+            let mut new_moves: Vec<(Move, i64)> = new_neighborhood
                 .iter()
                 .filter(|(_, &delta)| delta > 0)
                 .map(|(m, &d)| (*m, d))
                 .collect();
+            new_moves.sort_by_key(|&(_, d)| -d);
             lm.extend(new_moves.into_iter().map(|(m, d)| (m, d)));
         }
     }
@@ -1003,8 +1004,8 @@ fn run_candidate_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iter
         writeln!(&mut file, "iteration,score,time_ms").unwrap();
 
         for iter in 0..iterations {
-            let mut route: Vec<usize> = (0..n).collect();
-            route.shuffle(&mut rng);
+            let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
+            let (route, _, _) = solve_random(&distance_matrix, &rewards, &visit_subset, true);
             let start_time = Instant::now();
             let (sol, score) = solver(&route, distance_matrix, rewards);
             let elapsed = start_time.elapsed().as_millis() as i64;
