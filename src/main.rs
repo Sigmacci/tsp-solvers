@@ -969,6 +969,9 @@ fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: 
         for _ in 0..lm.len(){
             let (next_move, delta_score) = lm.pop_front().unwrap();
             if check_if_move_is_legal(&current_route, &next_move) {
+                if delta_score <= 0{
+                    break
+                }
                 match next_move {
                     Move::ExtInsert { node, after_idx } => { current_route.insert(after_idx, node); },
                     Move::ExtRemove { idx }             => { current_route.remove(idx); },
@@ -1031,7 +1034,7 @@ fn run_candidate_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iter
             let (route, _, _) = solve_random(&distance_matrix, &rewards, &visit_subset, true);
             let start_time = Instant::now();
             let (sol, score) = solver(&route, distance_matrix, rewards);
-            let elapsed = start_time.elapsed().as_millis() as i64;
+            let elapsed = start_time.elapsed().as_nanos() as i64;
             scores.push(score);
             times.push(elapsed);
             if score > best_score {
