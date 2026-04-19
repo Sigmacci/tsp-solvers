@@ -806,7 +806,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
 
 fn solve_candidate_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> (Vec<usize>, i64){
     let k: i32 = 10;
-    let mut found_better: bool = false;
+    let mut found_better: bool = true;
     let mut score = calculate_score(route, distance_matrix, rewards);
     let mut current_route = route.clone();
     while found_better{
