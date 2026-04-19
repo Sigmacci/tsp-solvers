@@ -489,7 +489,6 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
         }
     }
     if neighborhood_type == NeighborhoodType::VertexSwap {
-        //println!("Initializing vertex swap neighborhood");
         for i in 0..route.len() {
             for j in (i + 2)..route.len() {
                 if i == 0 && j == route.len() - 1 { continue; }
@@ -504,14 +503,12 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
                 let next1 : usize = route[(i + 1) % route.len()];
                 let next2 : usize = route[(j + 1) % route.len()];
 
-                // Calculate delta including rewards
-                let old_score = rewards[node1] + rewards[node2]
-                    - distance_matrix[prev1][node1] - distance_matrix[node1][next1]
-                    - distance_matrix[prev2][node2] - distance_matrix[node2][next2];
-                let new_score = rewards[node2] + rewards[node1]
-                    - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
-                    - distance_matrix[prev2][node1] - distance_matrix[node1][next2];
-                let delta_score = new_score - old_score;
+                
+
+                let delta_score : i64 = distance_matrix[prev1][node1] + distance_matrix[node1][next1] 
+                                    + distance_matrix[prev2][node2] + distance_matrix[node2][next2]
+                                    - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
+                                    - distance_matrix[prev2][node1] - distance_matrix[node1][next2];
 
                 neighborhood.insert(Move::IntVertexSwap { idx1: i, idx2: j }, delta_score);
             }
@@ -526,26 +523,8 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
                 let edge2_src = route[j];
                 let edge2_dst = route[(j + 1) % route.len()];
 
-                let mut old_score = 0;
-                let mut new_score = 0;
-
-                for k in (i + 1)..=j {
-                    old_score += rewards[route[k]];
-                    old_score -= distance_matrix[route[k - 1]][route[k]];
-                }
-                old_score -= distance_matrix[edge2_src][edge2_dst];
-
-                for k in (i + 1..=j).rev() {
-                    new_score += rewards[route[k]];
-                    if k == (i + 1) {
-                        new_score -= distance_matrix[edge1_src][route[j]];
-                    } else {
-                        new_score -= distance_matrix[route[k]][route[k - 1]];
-                    }
-                }
-                new_score -= distance_matrix[route[i + 1]][edge2_dst];
-
-                let delta_score = new_score - old_score;
+                let delta_score = distance_matrix[edge1_src][edge1_dst] + distance_matrix[edge2_src][edge2_dst]
+                                    - distance_matrix[edge1_src][edge2_src] - distance_matrix[edge1_dst][edge2_dst];
 
                 neighborhood.insert(Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j }, delta_score);
             }
@@ -975,18 +954,20 @@ fn edge_in_route(route: &Vec<usize>, a: usize, b: usize) -> Option<bool> {
 
 fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> (Vec<usize>, i64, i64) {
     let mut current_route = route.clone();
+    let mut previous_route = route.clone();
     let mut current_score = calculate_score(&current_route, distance_matrix, rewards);
-    let mut lm: VecDeque<(Move, i64, Vec<(usize, usize)>, bool)> = VecDeque::new(); // bool: reversed
+    let mut lm: VecDeque<(Move, i64, Vec<(usize, usize)>, bool)> = VecDeque::new();
 
     let mut neighborhood = initialize_neighborhood(&current_route, distance_matrix, rewards, NeighborhoodType::EdgeSwap);
     let mut moves: Vec<(Move, i64)> = neighborhood.iter().filter(|(_, &delta)| delta > 0).map(|(m, &d)| (*m, d)).collect();
-    moves.sort_by_key(|&(_, d)| -d); // descending
+    moves.sort_by_key(|&(_, d)| -d);
     for (mv, delta) in moves {
         let removed = removed_edges_for_move(&current_route, &mv);
         lm.push_back((mv, delta, removed, false));
     }
     loop {
-        let neighborhood = initialize_neighborhood(&current_route, distance_matrix, rewards, NeighborhoodType::EdgeSwap);
+        let neighborhood_to_be_added = initialize_neighborhood_changed(&current_route, &previous_route, distance_matrix, rewards, NeighborhoodType::EdgeSwap);
+        previous_route = current_route.clone();
         let mut new_moves: Vec<(Move, i64)> = neighborhood.iter().filter(|(_, &delta)| delta > 0).map(|(m, &d)| (*m, d)).collect();
         new_moves.sort_by_key(|&(_, d)| -d);
         for (mv, delta) in new_moves {
@@ -1037,7 +1018,6 @@ fn solve_lm_moves(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: 
         if !found_applicable {
             break;
         }
-        lm.clear();
     }
     (current_route, current_score, 0)
 }
