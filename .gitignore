@@ -28,3 +28,5 @@ target
 # Solution dumps
 /solutions
 /plots
+/maybe_java
+/new_tests
