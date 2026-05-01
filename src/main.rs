@@ -1238,47 +1238,41 @@ fn run_candidate_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iter
     }
 }
 
-fn run_msls(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_type: NeighborhoodType, greedy: bool) -> (Vec<usize>, i64){
+fn run_msls(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_type: NeighborhoodType, greedy: bool) -> (Vec<usize>, i64) {
     let mut rng = rand::thread_rng();
-    let mut start_route: Vec<usize> = solve_random(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), false);
-    let mut start_score = calculate_score(&start_route, distance_matrix, rewards);
-    
-    
-    let mut best_route = *start_route.clone();
-    let mut best_score = *start_score;
-    let mut current_route = start_route.clone();
-    let mut current_score = *start_score;
+    let mut best_route: Vec<usize> = Vec::new();
+    let mut best_score = i64::MIN;
 
-    for _ in 0..200 { //HARDCODED FROM EXCERCISE
+    for _ in 0..200 {
+        let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
+        visit_subset.shuffle(&mut rng);
+
+        let (mut route, mut score, _) = solve_random(distance_matrix, rewards, &visit_subset, false);
+
         let (optimized_route, optimized_score) = local_search(
-            &mut current_route.clone(),
+            &mut route,
             distance_matrix,
             rewards,
-            &mut current_score.clone(),
+            &mut score,
             neighborhood_type,
             greedy,
         );
 
         if optimized_score > best_score {
             best_score = optimized_score;
-            best_route = optimized_route.clone();
-            current_route = optimized_route;
-            current_score = optimized_score;
+            best_route = optimized_route;
         }
-        current_route = solve_random(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), false);
-        current_score = calculate_score(&current_route, distance_matrix, rewards);
     }
 
     (best_route, best_score)
 }
 
 fn run_ils(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_type: NeighborhoodType, greedy: bool, time_limit: std::time::Duration) -> (Vec<usize>, i64){
-    let mut start_route: Vec<usize> = solve_random(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), false);
-    let mut start_score = calculate_score(&start_route, distance_matrix, rewards);
+    let (mut start_route, mut start_score, _) = solve_random(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), false);
     let mut final_route = start_route.clone();
     let mut final_score = start_score;
 
-    start_route = local_search(
+    (start_route, start_score) = local_search(
         &mut start_route.clone(),
         distance_matrix,
         rewards,
@@ -1313,10 +1307,10 @@ fn run_ils(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_typ
     (final_route, final_score)
 }
 
-fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, current_score: i64, neighborhood_type: NeighborhoodType) -> (Vec<Move>, i64) {
+fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, current_score: i64, neighborhood_type: NeighborhoodType) -> (Vec<usize>, i64) {
     let n = current_route.len();
     let mut puteurbated_route = current_route.clone();
-    let mut delte_score = current_score;
+    let mut delta_score = current_score;
     //do random 5 moves of the given neighborhood type
     let mut rng = rand::thread_rng();
     for _ in 0..5 {
@@ -1352,17 +1346,16 @@ fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64
         }
     }
 
-    (peturbated_route, delte_score)
+    (puteurbated_route, delta_score)
 
 }
 
 fn run_lns(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_type: NeighborhoodType, greedy: bool, time_limit: std::time::Duration) -> (Vec<usize>, i64){
-        let mut start_route: Vec<usize> = solve_random(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), false);
-        let mut start_score = calculate_score(&start_route, distance_matrix, rewards);
+        let (mut start_route, mut start_score, _) = solve_random(distance_matrix, rewards, &(0..distance_matrix.len()).collect(), false);
         let mut final_route = start_route.clone();
         let mut final_score = start_score;
     
-        start_route = local_search(
+        (start_route, start_score) = local_search(
             &mut start_route.clone(),
             distance_matrix,
             rewards,
@@ -1378,7 +1371,7 @@ fn run_lns(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_typ
         
         let mut start_time = std::time::Instant::now();
         while start_time.elapsed() < time_limit {
-            let (destroyed_route, destroyed_score) = destroy_route(&start_route, distance_matrix, start_score, neighborhood_type);
+            let (destroyed_route, destroyed_score) = destroy_route(&start_route, distance_matrix, rewards, start_score, neighborhood_type);
             let (fixed_route, fixed_score) = fix_route(&destroyed_route, distance_matrix, rewards);
             let (optimized_route, optimized_score) = local_search(
                 &mut fixed_route.clone(),
@@ -1398,7 +1391,7 @@ fn run_lns(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_typ
         (final_route, final_score)
 }
 
-fn destroy_route(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, current_score: i64, neighborhood_type: NeighborhoodType) -> (Vec<Move>, i64){
+fn destroy_route(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, current_score: i64, neighborhood_type: NeighborhoodType) -> (Vec<usize>, i64){
     //destroy 30% 
     let route_length = current_route.len();
     let mut left_to_destroy = (route_length as f64 * 0.3).round() as usize;
@@ -1420,10 +1413,11 @@ fn destroy_route(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, cu
                 destroyed_route.remove(idx1);
                 left_to_destroy -= 1;
             }
+            _ => {}
         }
     }
-    
-    (destroyed_route, calculate_score(&destroyed_route, distance_matrix, rewards))
+    let destroyed_score = calculate_score(&destroyed_route, distance_matrix, rewards);
+    (destroyed_route, destroyed_score)
 }
 
 fn fix_route(destroyed_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) -> (Vec<usize>, i64){
@@ -1501,8 +1495,147 @@ fn fix_route(destroyed_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewa
     (route, total_score)
 }
 
-fn run_extended_tests(){
+fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
+    use std::time::Instant;
+    use rand::seq::SliceRandom;
+    let iterations = 200;
+    let mut rng = rand::thread_rng();
+    let methods = vec!["msls", "ils", "lns"];
+    let neighborhood_type = NeighborhoodType::EdgeSwap;
+    let greedy = false;
 
+    // MSLS
+    let mut msls_scores = Vec::with_capacity(iterations);
+    let mut msls_times = Vec::with_capacity(iterations);
+    let mut msls_best_solution: Option<(Vec<usize>, i64)> = None;
+    let mut msls_best_score = i64::MIN;
+
+    let msls_filename = "./solutions/solution_msls_a_.csv";
+    let mut msls_file = std::fs::File::options()
+        .append(true)
+        .create(true)
+        .open(&msls_filename)
+        .expect("Failed to open or create the file");
+    writeln!(&mut msls_file, "iteration,score,time_ms").unwrap();
+
+    let mut msls_max_time = 0i64;
+    for iter in 0..iterations {
+        let start_time = Instant::now();
+        let (route, score) = run_msls(distance_matrix, rewards, neighborhood_type, greedy);
+        let elapsed = start_time.elapsed().as_millis() as i64;
+        if elapsed > msls_max_time { msls_max_time = elapsed; }
+        msls_scores.push(score);
+        msls_times.push(elapsed);
+        if score > msls_best_score {
+            msls_best_score = score;
+            msls_best_solution = Some((route.clone(), score));
+        }
+        writeln!(&mut msls_file, "{},{},{}", iter, score, elapsed).unwrap();
+    }
+
+    let msls_avg_score = msls_scores.iter().sum::<i64>() as f64 / msls_scores.len() as f64;
+    let msls_min_score = *msls_scores.iter().min().unwrap_or(&0);
+    let msls_max_score = *msls_scores.iter().max().unwrap_or(&0);
+    let msls_avg_time = msls_times.iter().sum::<i64>() as f64 / msls_times.len() as f64;
+    let msls_min_time = *msls_times.iter().min().unwrap_or(&0);
+    let msls_max_time_stat = *msls_times.iter().max().unwrap_or(&0);
+    writeln!(&mut msls_file, "avg_score,min_score,max_score,avg_time_ms,min_time_ms,max_time_ms").unwrap();
+    writeln!(
+        &mut msls_file,
+        "{:.2},{},{},{:.2},{},{}",
+        msls_avg_score, msls_min_score, msls_max_score, msls_avg_time, msls_min_time, msls_max_time_stat
+    ).unwrap();
+    if let Some((ref best_route, best_score)) = msls_best_solution {
+        writeln!(&mut msls_file, "best_solution,{:?},{}", best_route, best_score).unwrap();
+    }
+
+    // ILS
+    let mut ils_scores = Vec::with_capacity(iterations);
+    let mut ils_times = Vec::with_capacity(iterations);
+    let mut ils_best_solution: Option<(Vec<usize>, i64)> = None;
+    let mut ils_best_score = i64::MIN;
+
+    let ils_filename = "./solutions/solution_ils_a_.csv";
+    let mut ils_file = std::fs::File::options()
+        .append(true)
+        .create(true)
+        .open(&ils_filename)
+        .expect("Failed to open or create the file");
+    writeln!(&mut ils_file, "iteration,score,time_ms").unwrap();
+
+    let ils_time_limit = std::time::Duration::from_millis(msls_max_time as u64);
+    for iter in 0..iterations {
+        let start_time = Instant::now();
+        let (route, score) = run_ils(distance_matrix, rewards, neighborhood_type, greedy, ils_time_limit);
+        let elapsed = start_time.elapsed().as_millis() as i64;
+        ils_scores.push(score);
+        ils_times.push(elapsed);
+        if score > ils_best_score {
+            ils_best_score = score;
+            ils_best_solution = Some((route.clone(), score));
+        }
+        writeln!(&mut ils_file, "{},{},{}", iter, score, elapsed).unwrap();
+    }
+
+    let ils_avg_score = ils_scores.iter().sum::<i64>() as f64 / ils_scores.len() as f64;
+    let ils_min_score = *ils_scores.iter().min().unwrap_or(&0);
+    let ils_max_score = *ils_scores.iter().max().unwrap_or(&0);
+    let ils_avg_time = ils_times.iter().sum::<i64>() as f64 / ils_times.len() as f64;
+    let ils_min_time = *ils_times.iter().min().unwrap_or(&0);
+    let ils_max_time_stat = *ils_times.iter().max().unwrap_or(&0);
+    writeln!(&mut ils_file, "avg_score,min_score,max_score,avg_time_ms,min_time_ms,max_time_ms").unwrap();
+    writeln!(
+        &mut ils_file,
+        "{:.2},{},{},{:.2},{},{}",
+        ils_avg_score, ils_min_score, ils_max_score, ils_avg_time, ils_min_time, ils_max_time_stat
+    ).unwrap();
+    if let Some((ref best_route, best_score)) = ils_best_solution {
+        writeln!(&mut ils_file, "best_solution,{:?},{}", best_route, best_score).unwrap();
+    }
+
+    // LNS
+    let mut lns_scores = Vec::with_capacity(iterations);
+    let mut lns_times = Vec::with_capacity(iterations);
+    let mut lns_best_solution: Option<(Vec<usize>, i64)> = None;
+    let mut lns_best_score = i64::MIN;
+
+    let lns_filename = "./solutions/solution_lns_a_.csv";
+    let mut lns_file = std::fs::File::options()
+        .append(true)
+        .create(true)
+        .open(&lns_filename)
+        .expect("Failed to open or create the file");
+    writeln!(&mut lns_file, "iteration,score,time_ms").unwrap();
+
+    let lns_time_limit = std::time::Duration::from_millis(msls_max_time as u64);
+    for iter in 0..iterations {
+        let start_time = Instant::now();
+        let (route, score) = run_lns(distance_matrix, rewards, neighborhood_type, greedy, lns_time_limit);
+        let elapsed = start_time.elapsed().as_millis() as i64;
+        lns_scores.push(score);
+        lns_times.push(elapsed);
+        if score > lns_best_score {
+            lns_best_score = score;
+            lns_best_solution = Some((route.clone(), score));
+        }
+        writeln!(&mut lns_file, "{},{},{}", iter, score, elapsed).unwrap();
+    }
+
+    let lns_avg_score = lns_scores.iter().sum::<i64>() as f64 / lns_scores.len() as f64;
+    let lns_min_score = *lns_scores.iter().min().unwrap_or(&0);
+    let lns_max_score = *lns_scores.iter().max().unwrap_or(&0);
+    let lns_avg_time = lns_times.iter().sum::<i64>() as f64 / lns_times.len() as f64;
+    let lns_min_time = *lns_times.iter().min().unwrap_or(&0);
+    let lns_max_time_stat = *lns_times.iter().max().unwrap_or(&0);
+    writeln!(&mut lns_file, "avg_score,min_score,max_score,avg_time_ms,min_time_ms,max_time_ms").unwrap();
+    writeln!(
+        &mut lns_file,
+        "{:.2},{},{},{:.2},{},{}",
+        lns_avg_score, lns_min_score, lns_max_score, lns_avg_time, lns_min_time, lns_max_time_stat
+    ).unwrap();
+    if let Some((ref best_route, best_score)) = lns_best_solution {
+        writeln!(&mut lns_file, "best_solution,{:?},{}", best_route, best_score).unwrap();
+    }
 }
 
 fn main() {
@@ -1563,6 +1696,7 @@ fn main() {
 
 
      //run_search_tests(&distance_matrix, &rewards, 100);
-    run_candidate_tests(&distance_matrix, &rewards, 100);
+    // run_candidate_tests(&distance_matrix, &rewards, 100);
+    run_extended_tests(&distance_matrix, &rewards);
 
 }
