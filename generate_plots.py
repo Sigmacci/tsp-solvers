@@ -60,7 +60,7 @@ def plot_all_solutions(coord_csv_path, solutions_dir, output_dir="plots"):
             plot_tsp_route_from_solution(coord_csv_path, solution_path, output_dir=output_dir)
 
 if __name__ == "__main__":
-    coord_csv = './input_data/TSPA.csv'
-    solutions_dir = './solutions'
+    coord_csv = './input_data/TSPB.csv'
+    solutions_dir = './dum_newest'
     output_dir = './plots'
     plot_all_solutions(coord_csv, solutions_dir, output_dir)

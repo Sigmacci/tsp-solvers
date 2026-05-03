@@ -450,7 +450,7 @@ fn run_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
             (i, score, length)
         }).collect();
 
-        let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + "_a_.csv";
+        let mut dump_filename : String = "./solutions/solution_".to_owned() + methods[idx] + "_b_.csv";
         let mut file = fs::File::options()
             .append(true)
             .create(true)
@@ -815,7 +815,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                     + &neighborhood_type.to_string()
                     + "_"
                     + methods[idx]
-                    + "_a_.csv";
+                    + "_b_.csv";
 
                 let mut file = fs::File::options()
                     .append(true)
@@ -905,7 +905,7 @@ fn run_search_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iterati
                 + &neighborhood_type.to_string()
                 + "_"
                 + methods[idx]
-                + "_a_.csv";
+                + "_b_.csv";
 
             let mut file = fs::File::options()
                 .append(true)
@@ -1194,7 +1194,7 @@ fn run_candidate_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, iter
         let mut best_solution: Option<(Vec<usize>, i64)> = None;
         let mut best_score = i64::MIN;
 
-        let filename = format!("./solutions/solution_{}_a_.csv", method_name);
+        let filename = format!("./solutions/solution_{}_b_.csv", method_name);
         let mut file = std::fs::File::options()
             .append(true)
             .create(true)
@@ -1288,7 +1288,7 @@ fn run_ils(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_typ
     
     let mut start_time = std::time::Instant::now();
     while start_time.elapsed() < time_limit {
-        let (peturbated_route, peturbated_score) = create_peturbations(&start_route, distance_matrix, start_score, neighborhood_type);
+        let (peturbated_route, peturbated_score) = create_peturbations(&start_route, distance_matrix, start_score, rewards, neighborhood_type);
         let (optimized_route, optimized_score) = local_search(
             &mut peturbated_route.clone(),
             distance_matrix,
@@ -1307,7 +1307,7 @@ fn run_ils(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, neighborhood_typ
     (final_route, final_score)
 }
 
-fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, current_score: i64, neighborhood_type: NeighborhoodType) -> (Vec<usize>, i64) {
+fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, current_score: i64, rewards: &Vec<i64>, neighborhood_type: NeighborhoodType) -> (Vec<usize>, i64) {
     let n = current_route.len();
     let mut puteurbated_route = current_route.clone();
     let mut delta_score = current_score;
@@ -1318,13 +1318,16 @@ fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64
             NeighborhoodType::VertexSwap => {
                 let idx1 = rng.gen_range(0..n);
                 let idx2 = rng.gen_range(0..n);
+                if idx1 == idx2 {
+                    continue;
+                }
                 let node1 = puteurbated_route[idx1];
                 let node2 = puteurbated_route[idx2];
                 let prev1 = puteurbated_route[(idx1 + n - 1) % n];
                 let next1 = puteurbated_route[(idx1 + 1) % n];
                 let prev2 = puteurbated_route[(idx2 + n - 1) % n];
                 let next2 = puteurbated_route[(idx2 + 1) % n];
-                delta_score += distance_matrix[prev1][node1] + distance_matrix[node1][next1] 
+                delta_score -= distance_matrix[prev1][node1] + distance_matrix[node1][next1] 
                                     + distance_matrix[prev2][node2] + distance_matrix[node2][next2]
                                     - distance_matrix[prev1][node2] - distance_matrix[node2][next1]
                                     - distance_matrix[prev2][node1] - distance_matrix[node1][next2];
@@ -1339,14 +1342,14 @@ fn create_peturbations(current_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64
                     let edge1_dst = puteurbated_route[start];
                     let edge2_src = puteurbated_route[(end + n - 1) % n];
                     let edge2_dst = puteurbated_route[end];
-                    delta_score += distance_matrix[edge1_src][edge2_src] + distance_matrix[edge1_dst][edge2_dst] - distance_matrix[edge1_src][edge1_dst] - distance_matrix[edge2_src][edge2_dst];
+                    delta_score -= distance_matrix[edge1_src][edge2_src] + distance_matrix[edge1_dst][edge2_dst] - distance_matrix[edge1_src][edge1_dst] - distance_matrix[edge2_src][edge2_dst];
                     puteurbated_route[start..=end].reverse();
                 }
             },
         }
     }
-
-    (puteurbated_route, delta_score)
+    let real_score = calculate_score(&puteurbated_route, distance_matrix, rewards);
+    (puteurbated_route, real_score)
 
 }
 
@@ -1498,7 +1501,7 @@ fn fix_route(destroyed_route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewa
 fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     use std::time::Instant;
     use rand::seq::SliceRandom;
-    let iterations = 200;
+    let iterations = 20;
     let mut rng = rand::thread_rng();
     let methods = vec!["msls", "ils", "lns"];
     let neighborhood_type = NeighborhoodType::EdgeSwap;
@@ -1510,7 +1513,7 @@ fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     let mut msls_best_solution: Option<(Vec<usize>, i64)> = None;
     let mut msls_best_score = i64::MIN;
 
-    let msls_filename = "./solutions/solution_msls_a_.csv";
+    let msls_filename = "./solutions/solution_msls_b_.csv";
     let mut msls_file = std::fs::File::options()
         .append(true)
         .create(true)
@@ -1519,7 +1522,7 @@ fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     writeln!(&mut msls_file, "iteration,score,time_ms").unwrap();
 
     let mut msls_max_time = 0i64;
-    for iter in 0..iterations {
+    for iter in 0..2 {
         let start_time = Instant::now();
         let (route, score) = run_msls(distance_matrix, rewards, neighborhood_type, greedy);
         let elapsed = start_time.elapsed().as_millis() as i64;
@@ -1555,7 +1558,7 @@ fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     let mut ils_best_solution: Option<(Vec<usize>, i64)> = None;
     let mut ils_best_score = i64::MIN;
 
-    let ils_filename = "./solutions/solution_ils_a_.csv";
+    let ils_filename = "./solutions/solution_ils_b_.csv";
     let mut ils_file = std::fs::File::options()
         .append(true)
         .create(true)
@@ -1599,7 +1602,7 @@ fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     let mut lns_best_solution: Option<(Vec<usize>, i64)> = None;
     let mut lns_best_score = i64::MIN;
 
-    let lns_filename = "./solutions/solution_lns_a_.csv";
+    let lns_filename = "./solutions/solution_lns_b_.csv";
     let mut lns_file = std::fs::File::options()
         .append(true)
         .create(true)
