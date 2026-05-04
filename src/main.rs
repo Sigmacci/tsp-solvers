@@ -534,48 +534,48 @@ fn initialize_neighborhood(route: &Vec<usize>, distance_matrix: &Vec<Vec<i64>>, 
     neighborhood
 }
 
-fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, score: &mut i64, neighborhood_type: NeighborhoodType, greedy: bool) -> (Vec<usize>, i64) {
-    let mut rng = rand::thread_rng();
-    let mut improved: bool = true;
-    let mut last_score = *score;
-    while improved {
-        //println!("I am actually working, route: {:?}, score: {}, last_score: {}", route, score, last_score);
-        let neighborhood = initialize_neighborhood(route, distance_matrix, rewards, neighborhood_type);
-        improved = false;
+// fn local_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, score: &mut i64, neighborhood_type: NeighborhoodType, greedy: bool) -> (Vec<usize>, i64) {
+//     let mut rng = rand::thread_rng();
+//     let mut improved: bool = true;
+//     let mut last_score = *score;
+//     while improved {
+//         //println!("I am actually working, route: {:?}, score: {}, last_score: {}", route, score, last_score);
+//         let neighborhood = initialize_neighborhood(route, distance_matrix, rewards, neighborhood_type);
+//         improved = false;
 
-        let best_option = if greedy {
-            neighborhood.iter()
-                .filter(|&(_, &delta_score)| delta_score > 0)
-                .choose(&mut rand::thread_rng())
-        } else {
-            neighborhood.iter().filter(|&(_, &delta_score)| delta_score > 0).max_by_key(|&(_, delta_score)| *delta_score)
-        };
+//         let best_option = if greedy {
+//             neighborhood.iter()
+//                 .filter(|&(_, &delta_score)| delta_score > 0)
+//                 .choose(&mut rand::thread_rng())
+//         } else {
+//             neighborhood.iter().filter(|&(_, &delta_score)| delta_score > 0).max_by_key(|&(_, delta_score)| *delta_score)
+//         };
 
-        if let Some((&best_move, &delta_score)) = best_option {
-            if delta_score > 0 {
-                *score += delta_score;
-                last_score = *score;
-                improved = true;
-                match best_move {
-                    Move::ExtInsert { node, after_idx } => {
-                        route.insert(after_idx , node);
-                    },
-                    Move::ExtRemove { idx } => {
-                        route.remove(idx);
-                    },
-                    Move::IntVertexSwap { idx1, idx2 } => {
-                        route.swap(idx1, idx2);
-                    },
-                    Move::IntEdgeSwap { reverse_start, reverse_end } => {
-                        route[reverse_start..=reverse_end].reverse();
-                    }
-                }
-            }
-        }
-    }
+//         if let Some((&best_move, &delta_score)) = best_option {
+//             if delta_score > 0 {
+//                 *score += delta_score;
+//                 last_score = *score;
+//                 improved = true;
+//                 match best_move {
+//                     Move::ExtInsert { node, after_idx } => {
+//                         route.insert(after_idx , node);
+//                     },
+//                     Move::ExtRemove { idx } => {
+//                         route.remove(idx);
+//                     },
+//                     Move::IntVertexSwap { idx1, idx2 } => {
+//                         route.swap(idx1, idx2);
+//                     },
+//                     Move::IntEdgeSwap { reverse_start, reverse_end } => {
+//                         route[reverse_start..=reverse_end].reverse();
+//                     }
+//                 }
+//             }
+//         }
+//     }
     
-    (route.clone(), *score)
-}
+//     (route.clone(), *score)
+// }
 
 fn evaluate_move(m: Move, route: &[usize], distance_matrix: &[Vec<i64>], rewards: &[i64]) -> i64 {
     let len = route.len();
@@ -625,127 +625,127 @@ fn evaluate_move(m: Move, route: &[usize], distance_matrix: &[Vec<i64>], rewards
 }
 
 
-// fn local_search(
-//     route: &mut Vec<usize>, 
-//     distance_matrix: &[Vec<i64>], 
-//     rewards: &[i64], 
-//     score: &mut i64, 
-//     neighborhood_type: NeighborhoodType,
-//     greedy: bool
-// ) -> (Vec<usize>, i64) {
-//     let mut rng = rand::thread_rng();
-//     let mut improved = true;
+fn local_search(
+    route: &mut Vec<usize>, 
+    distance_matrix: &[Vec<i64>], 
+    rewards: &[i64], 
+    score: &mut i64, 
+    neighborhood_type: NeighborhoodType,
+    greedy: bool
+) -> (Vec<usize>, i64) {
+    let mut rng = rand::thread_rng();
+    let mut improved = true;
     
-//     while improved {
-//         improved = false;
-//         let len = route.len();
+    while improved {
+        improved = false;
+        let len = route.len();
 
-//         let mut best_move: Option<Move> = None;
-//         let mut best_delta: i64 = 0;
+        let mut best_move: Option<Move> = None;
+        let mut best_delta: i64 = 0;
 
-//         if greedy {
-//             let mut move_categories = vec![0, 1]; 
-//             match neighborhood_type {
-//                 NeighborhoodType::VertexSwap => move_categories.push(2),
-//                 NeighborhoodType::EdgeSwap => move_categories.push(3),
-//             }
-//             move_categories.shuffle(&mut rng);
+        if greedy {
+            let mut move_categories = vec![0, 1]; 
+            match neighborhood_type {
+                NeighborhoodType::VertexSwap => move_categories.push(2),
+                NeighborhoodType::EdgeSwap => move_categories.push(3),
+            }
+            move_categories.shuffle(&mut rng);
 
-//             let mut route_indices: Vec<usize> = (0..len).collect();
-//             route_indices.shuffle(&mut rng);
+            let mut route_indices: Vec<usize> = (0..len).collect();
+            route_indices.shuffle(&mut rng);
 
-//             'greedy_search: for &category in &move_categories {
-//                 match category {
-//                     0 => { // ExtRemove
-//                         for &idx in &route_indices {
-//                             let m = Move::ExtRemove { idx };
-//                             let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                             if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
-//                         }
-//                     },
-//                     1 => { // ExtInsert
-//                         let mut missing_nodes: Vec<usize> = (0..distance_matrix.len()).filter(|&x| !route.contains(&x)).collect();
-//                         missing_nodes.shuffle(&mut rng);
-//                         for &node in &missing_nodes {
-//                             for &i in &route_indices {
-//                                 let m = Move::ExtInsert { node, after_idx: i };
-//                                 let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                                 if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
-//                             }
-//                         }
-//                     },
-//                    2 => { // IntVertexSwap
-//                         for &i in &route_indices {
-//                             for j in (i + 1)..len { // Starts at i + 1
-//                                 if i == 0 && j == len - 1 { continue; } // Still need the wrap-around guard!
-//                                 let m = Move::IntVertexSwap { idx1: i, idx2: j };
-//                                 let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                                 if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
-//                             }
-//                         }
-//                     },
-//                     3 => { // IntEdgeSwap
-//                         for &i in &route_indices {
-//                             for j in (i + 2)..len { // Starts at i + 2 to prevent pointless 1-node reversals
-//                                 if i == 0 && j == len - 1 { continue; }
-//                                 let m = Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j };
-//                                 let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                                 if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
-//                             }
-//                         }
-//                     },
-//                     _ => unreachable!()
-//                 }
-//             }
-//         } else {
-//             for idx in 0..len {
-//                 let m = Move::ExtRemove { idx };
-//                 let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                 if delta > best_delta { best_move = Some(m); best_delta = delta; }
-//             }
+            'greedy_search: for &category in &move_categories {
+                match category {
+                    0 => { // ExtRemove
+                        for &idx in &route_indices {
+                            let m = Move::ExtRemove { idx };
+                            let delta = evaluate_move(m, route, distance_matrix, rewards);
+                            if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
+                        }
+                    },
+                    1 => { // ExtInsert
+                        let mut missing_nodes: Vec<usize> = (0..distance_matrix.len()).filter(|&x| !route.contains(&x)).collect();
+                        missing_nodes.shuffle(&mut rng);
+                        for &node in &missing_nodes {
+                            for &i in &route_indices {
+                                let m = Move::ExtInsert { node, after_idx: i };
+                                let delta = evaluate_move(m, route, distance_matrix, rewards);
+                                if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
+                            }
+                        }
+                    },
+                   2 => { // IntVertexSwap
+                        for &i in &route_indices {
+                            for j in (i + 1)..len { // Starts at i + 1
+                                if i == 0 && j == len - 1 { continue; } // Still need the wrap-around guard!
+                                let m = Move::IntVertexSwap { idx1: i, idx2: j };
+                                let delta = evaluate_move(m, route, distance_matrix, rewards);
+                                if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
+                            }
+                        }
+                    },
+                    3 => { // IntEdgeSwap
+                        for &i in &route_indices {
+                            for j in (i + 2)..len { // Starts at i + 2 to prevent pointless 1-node reversals
+                                if i == 0 && j == len - 1 { continue; }
+                                let m = Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j };
+                                let delta = evaluate_move(m, route, distance_matrix, rewards);
+                                if delta > 0 { best_move = Some(m); best_delta = delta; break 'greedy_search; }
+                            }
+                        }
+                    },
+                    _ => unreachable!()
+                }
+            }
+        } else {
+            for idx in 0..len {
+                let m = Move::ExtRemove { idx };
+                let delta = evaluate_move(m, route, distance_matrix, rewards);
+                if delta > best_delta { best_move = Some(m); best_delta = delta; }
+            }
 
-//             let mut in_route = vec![false; distance_matrix.len()];
-//             for &node in route.iter() { in_route[node] = true; }
+            let mut in_route = vec![false; distance_matrix.len()];
+            for &node in route.iter() { in_route[node] = true; }
             
-//             for node in 0..distance_matrix.len() {
-//                 if !in_route[node] {
-//                     for i in 0..len {
-//                         let m = Move::ExtInsert { node, after_idx: i };
-//                         let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                         if delta > best_delta { best_move = Some(m); best_delta = delta; }
-//                     }
-//                 }
-//             }
-//             for i in 0..len {
-//                 for j in (i + 2)..len {
-//                     if i == 0 && j == len - 1 { continue; }
+            for node in 0..distance_matrix.len() {
+                if !in_route[node] {
+                    for i in 0..len {
+                        let m = Move::ExtInsert { node, after_idx: i };
+                        let delta = evaluate_move(m, route, distance_matrix, rewards);
+                        if delta > best_delta { best_move = Some(m); best_delta = delta; }
+                    }
+                }
+            }
+            for i in 0..len {
+                for j in (i + 2)..len {
+                    if i == 0 && j == len - 1 { continue; }
                     
-//                     let m = match neighborhood_type {
-//                         NeighborhoodType::VertexSwap => Move::IntVertexSwap { idx1: i, idx2: j },
-//                         NeighborhoodType::EdgeSwap => Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j },
-//                     };
+                    let m = match neighborhood_type {
+                        NeighborhoodType::VertexSwap => Move::IntVertexSwap { idx1: i, idx2: j },
+                        NeighborhoodType::EdgeSwap => Move::IntEdgeSwap { reverse_start: i + 1, reverse_end: j },
+                    };
 
-//                     let delta = evaluate_move(m, route, distance_matrix, rewards);
-//                     if delta > best_delta { best_move = Some(m); best_delta = delta; }
-//                 }
-//             }
-//         }
-//         if let Some(m) = best_move {
-//             *score += best_delta;
-//             improved = true;
+                    let delta = evaluate_move(m, route, distance_matrix, rewards);
+                    if delta > best_delta { best_move = Some(m); best_delta = delta; }
+                }
+            }
+        }
+        if let Some(m) = best_move {
+            *score += best_delta;
+            improved = true;
 
-//             match m {
-//                 Move::ExtInsert { node, after_idx } => { 
-//                     route.insert(after_idx + 1, node); 
-//                 },
-//                 Move::ExtRemove { idx } => { route.remove(idx); },
-//                 Move::IntVertexSwap { idx1, idx2 } => { route.swap(idx1, idx2); },
-//                 Move::IntEdgeSwap { reverse_start, reverse_end } => { route[reverse_start..=reverse_end].reverse(); }
-//             }
-//         }
-//     }
-//     (route.clone(), *score)
-// }
+            match m {
+                Move::ExtInsert { node, after_idx } => { 
+                    route.insert(after_idx + 1, node); 
+                },
+                Move::ExtRemove { idx } => { route.remove(idx); },
+                Move::IntVertexSwap { idx1, idx2 } => { route.swap(idx1, idx2); },
+                Move::IntEdgeSwap { reverse_start, reverse_end } => { route[reverse_start..=reverse_end].reverse(); }
+            }
+        }
+    }
+    (route.clone(), *score)
+}
 
 
 fn random_search(route: &mut Vec<usize>, distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>, score: &mut i64, neighborhood_type: NeighborhoodType, time_limit: i64) -> (Vec<usize>, i64) {
@@ -1701,5 +1701,7 @@ fn main() {
      //run_search_tests(&distance_matrix, &rewards, 100);
     // run_candidate_tests(&distance_matrix, &rewards, 100);
     run_extended_tests(&distance_matrix, &rewards);
+
+
 
 }
