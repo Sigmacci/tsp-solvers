@@ -1641,6 +1641,168 @@ fn run_extended_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     }
 }
 
+fn shared_vertices(a: &[usize], b: &[usize]) -> usize {
+    let set_b: HashSet<usize> = b.iter().cloned().collect();
+    a.iter().filter(|&&v| set_b.contains(&v)).count()
+}
+
+fn shared_edges(a: &[usize], b: &[usize]) -> usize {
+    let edges_b: HashSet<(usize, usize)> = {
+        let n = b.len();
+        (0..n).map(|i| {
+            let u = b[i];
+            let v = b[(i + 1) % n];
+            if u < v { (u, v) } else { (v, u) }
+        }).collect()
+    };
+    let n = a.len();
+    (0..n).filter(|&i| {
+        let u = a[i];
+        let v = a[(i + 1) % n];
+        let edge = if u < v { (u, v) } else { (v, u) };
+        edges_b.contains(&edge)
+    }).count()
+}
+
+fn pearson_correlation(xs: &[f64], ys: &[f64]) -> f64 {
+    let n = xs.len() as f64;
+    let mean_x = xs.iter().sum::<f64>() / n;
+    let mean_y = ys.iter().sum::<f64>() / n;
+    let num: f64 = xs.iter().zip(ys.iter()).map(|(&x, &y)| (x - mean_x) * (y - mean_y)).sum();
+    let den_x: f64 = xs.iter().map(|&x| (x - mean_x).powi(2)).sum::<f64>().sqrt();
+    let den_y: f64 = ys.iter().map(|&y| (y - mean_y).powi(2)).sum::<f64>().sqrt();
+    if den_x == 0.0 || den_y == 0.0 { return 0.0; }
+    num / (den_x * den_y)
+}
+
+fn run_global_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
+    use std::time::Instant;
+    use rand::seq::SliceRandom;
+
+    let mut rng = rand::thread_rng();
+    let n_local = 1000usize;
+    let neighborhood_type = NeighborhoodType::EdgeSwap;
+    let greedy = false;
+
+    // --- Step 1: generate very good solution via LNS ---
+    let good_time = std::time::Duration::from_secs(30);
+    println!("Generating best solution via LNS...");
+    let (best_route, best_score) = run_lns(distance_matrix, rewards, neighborhood_type, greedy, good_time);
+    println!("Best solution score: {}", best_score);
+
+    // --- Step 2: generate 1000 random local optima ---
+    println!("Generating {} local optima...", n_local);
+    let mut local_optima: Vec<(Vec<usize>, i64)> = Vec::with_capacity(n_local);
+    for i in 0..n_local {
+        if i % 100 == 0 { println!("  ... {}/{}", i, n_local); }
+        let mut visit_subset: Vec<usize> = (0..distance_matrix.len()).collect();
+        visit_subset.shuffle(&mut rng);
+        let (mut route, mut score, _) = solve_random(distance_matrix, rewards, &visit_subset, false);
+        let (opt_route, opt_score) = local_search(
+            &mut route,
+            distance_matrix,
+            rewards,
+            &mut score,
+            neighborhood_type,
+            greedy,
+        );
+        local_optima.push((opt_route, opt_score));
+    }
+
+    let scores: Vec<f64> = local_optima.iter().map(|(_, s)| *s as f64).collect();
+
+    // Precompute vertex and edge sets for all local optima
+    let vertex_sets: Vec<HashSet<usize>> = local_optima.iter()
+        .map(|(r, _)| r.iter().cloned().collect())
+        .collect();
+
+    let edge_sets: Vec<HashSet<(usize, usize)>> = local_optima.iter()
+        .map(|(r, _)| {
+            let n = r.len();
+            (0..n).map(|i| {
+                let u = r[i]; let v = r[(i + 1) % n];
+                if u < v { (u, v) } else { (v, u) }
+            }).collect()
+        })
+        .collect();
+
+    // Precompute vertex and edge sets for the best solution
+    let best_vertex_set: HashSet<usize> = best_route.iter().cloned().collect();
+    let best_n = best_route.len();
+    let best_edge_set: HashSet<(usize, usize)> = (0..best_n).map(|i| {
+        let u = best_route[i]; let v = best_route[(i + 1) % best_n];
+        if u < v { (u, v) } else { (v, u) }
+    }).collect();
+
+    // --- Step 3: similarity to best solution ---
+    let sim_to_best_vertex: Vec<f64> = vertex_sets.iter()
+        .map(|vs| vs.intersection(&best_vertex_set).count() as f64)
+        .collect();
+    let sim_to_best_edge: Vec<f64> = edge_sets.iter()
+        .map(|es| es.intersection(&best_edge_set).count() as f64)
+        .collect();
+
+    // --- Step 4: average pairwise similarity to all other local optima ---
+    println!("Computing pairwise similarities...");
+    let mut avg_sim_vertex: Vec<f64> = vec![0.0; n_local];
+    let mut avg_sim_edge:   Vec<f64> = vec![0.0; n_local];
+    for i in 0..n_local {
+        if i % 100 == 0 { println!("  ... pairwise {}/{}", i, n_local); }
+        let mut sv = 0usize;
+        let mut se = 0usize;
+        for j in 0..n_local {
+            if i == j { continue; }
+            sv += vertex_sets[i].intersection(&vertex_sets[j]).count();
+            se += edge_sets[i].intersection(&edge_sets[j]).count();
+        }
+        avg_sim_vertex[i] = sv as f64 / (n_local - 1) as f64;
+        avg_sim_edge[i]   = se as f64 / (n_local - 1) as f64;
+    }
+
+    // --- Step 5: Pearson correlations ---
+    let corr_best_vertex = pearson_correlation(&scores, &sim_to_best_vertex);
+    let corr_best_edge   = pearson_correlation(&scores, &sim_to_best_edge);
+    let corr_avg_vertex  = pearson_correlation(&scores, &avg_sim_vertex);
+    let corr_avg_edge    = pearson_correlation(&scores, &avg_sim_edge);
+
+    println!("Correlation (score vs sim_to_best vertex): {:.4}", corr_best_vertex);
+    println!("Correlation (score vs sim_to_best edge):   {:.4}", corr_best_edge);
+    println!("Correlation (score vs avg_sim vertex):     {:.4}", corr_avg_vertex);
+    println!("Correlation (score vs avg_sim edge):       {:.4}", corr_avg_edge);
+
+    // --- Step 6: write CSV outputs ---
+    fs::create_dir_all("./solutions").unwrap();
+
+    {
+        let filename = "./solutions/global_convexity_sim_to_best.csv";
+        let mut file = fs::File::create(filename).expect("Failed to create file");
+        writeln!(&mut file, "score,sim_to_best_vertex,sim_to_best_edge").unwrap();
+        for i in 0..n_local {
+            writeln!(&mut file, "{},{},{}", scores[i] as i64, sim_to_best_vertex[i] as usize, sim_to_best_edge[i] as usize).unwrap();
+        }
+    }
+
+    {
+        let filename = "./solutions/global_convexity_avg_sim.csv";
+        let mut file = fs::File::create(filename).expect("Failed to create file");
+        writeln!(&mut file, "score,avg_sim_vertex,avg_sim_edge").unwrap();
+        for i in 0..n_local {
+            writeln!(&mut file, "{},{:.4},{:.4}", scores[i] as i64, avg_sim_vertex[i], avg_sim_edge[i]).unwrap();
+        }
+    }
+
+    {
+        let filename = "./solutions/global_convexity_correlations.csv";
+        let mut file = fs::File::create(filename).expect("Failed to create file");
+        writeln!(&mut file, "metric,correlation").unwrap();
+        writeln!(&mut file, "sim_to_best_vertex,{:.6}", corr_best_vertex).unwrap();
+        writeln!(&mut file, "sim_to_best_edge,{:.6}", corr_best_edge).unwrap();
+        writeln!(&mut file, "avg_sim_vertex,{:.6}", corr_avg_vertex).unwrap();
+        writeln!(&mut file, "avg_sim_edge,{:.6}", corr_avg_edge).unwrap();
+        writeln!(&mut file, "best_solution_score,{}", best_score).unwrap();
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -1700,8 +1862,8 @@ fn main() {
 
      //run_search_tests(&distance_matrix, &rewards, 100);
     // run_candidate_tests(&distance_matrix, &rewards, 100);
-    run_extended_tests(&distance_matrix, &rewards);
-
+    //run_extended_tests(&distance_matrix, &rewards);
+    run_global_tests(&distance_matrix, &rewards);
 
 
 }
