@@ -1684,10 +1684,10 @@ fn run_global_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     let neighborhood_type = NeighborhoodType::EdgeSwap;
     let greedy = false;
 
-    // --- Step 1: generate very good solution via LNS ---
+    // --- Step 1: generate very good solution via ILS ---
     let good_time = std::time::Duration::from_secs(30);
-    println!("Generating best solution via LNS...");
-    let (best_route, best_score) = run_lns(distance_matrix, rewards, neighborhood_type, greedy, good_time);
+    println!("Generating best solution via ILS...");
+    let (best_route, best_score) = run_ils(distance_matrix, rewards, neighborhood_type, greedy, good_time);
     println!("Best solution score: {}", best_score);
 
     // --- Step 2: generate 1000 random local optima ---
@@ -1802,6 +1802,8 @@ fn run_global_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
         writeln!(&mut file, "best_solution_score,{}", best_score).unwrap();
     }
 }
+
+
 
 fn main() {
     let args: Vec<String> = env::args().collect();
