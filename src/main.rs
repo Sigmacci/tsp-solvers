@@ -35,6 +35,27 @@ impl fmt::Display for NeighborhoodType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HaeOperator {
+    Op1,
+    Op2WithLs,
+    Op2NoLs,
+    Op3WithLs,
+    Op3NoLs,
+}
+
+impl fmt::Display for HaeOperator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HaeOperator::Op1      => write!(f, "op1"),
+            HaeOperator::Op2WithLs => write!(f, "op2_ls"),
+            HaeOperator::Op2NoLs  => write!(f, "op2_nols"),
+            HaeOperator::Op3WithLs => write!(f, "op3_ls"),
+            HaeOperator::Op3NoLs  => write!(f, "op3_nols"),
+        }
+    }
+}
+
 
 
 fn read_csv_mapped(file_path: &str) -> Result<Vec<Vec<f64>>, Box<dyn Error>>{
@@ -1803,7 +1824,402 @@ fn run_global_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     }
 }
 
+// ============================================================
+// HAE – Hybrid Evolutionary Algorithm (Zadanie 6)
+// ============================================================
+//
+// Paste these functions into main.rs (before `fn main()`).
+// Then call `run_hae_tests(&distance_matrix, &rewards);` from main.
+// ============================================================
 
+// ------------------------------------------------------------------
+// Shared helpers used by all operators
+// ------------------------------------------------------------------
+
+/// Build the canonical (sorted) edge set of a route.
+fn route_edge_set(route: &[usize]) -> HashSet<(usize, usize)> {
+    let n = route.len();
+    (0..n)
+        .map(|i| {
+            let u = route[i];
+            let v = route[(i + 1) % n];
+            if u < v { (u, v) } else { (v, u) }
+        })
+        .collect()
+}
+
+/// Assemble a single cycle from a list of sub-paths by randomly
+/// concatenating them (with random reversal of each sub-path).
+fn join_subpaths_randomly(subpaths: Vec<Vec<usize>>) -> Vec<usize> {
+    let mut rng = rand::thread_rng();
+    let mut paths = subpaths;
+    // Randomly reverse each sub-path
+    for p in &mut paths {
+        if rng.gen_bool(0.5) {
+            p.reverse();
+        }
+    }
+    // Shuffle order
+    paths.shuffle(&mut rng);
+    paths.into_iter().flatten().collect()
+}
+
+fn recombine_op1(
+    parent_a: &[usize],
+    parent_b: &[usize],
+    distance_matrix: &Vec<Vec<i64>>,
+    rewards: &Vec<i64>,
+) -> Vec<usize> {
+    let vset_b: HashSet<usize> = parent_b.iter().cloned().collect();
+    let eset_b = route_edge_set(parent_b);
+
+    let n = parent_a.len();
+    let mut subpaths: Vec<Vec<usize>> = Vec::new();
+    let mut current: Vec<usize> = Vec::new();
+
+    for i in 0..n {
+        let u = parent_a[i];
+        let v = parent_a[(i + 1) % n];
+        let edge = if u < v { (u, v) } else { (v, u) };
+
+        if vset_b.contains(&u) {
+            if current.is_empty() {
+                current.push(u);
+            }
+            // Edge to next vertex is shared → extend sub-path
+            if eset_b.contains(&edge) && vset_b.contains(&v) {
+                current.push(v);
+            } else {
+                // Cut here
+                subpaths.push(current.clone());
+                current.clear();
+            }
+        } else {
+            if !current.is_empty() {
+                subpaths.push(current.clone());
+                current.clear();
+            }
+        }
+    }
+    if !current.is_empty() {
+        subpaths.push(current);
+    }
+
+    let mut seen: HashSet<usize> = HashSet::new();
+    let mut unique_subpaths: Vec<Vec<usize>> = Vec::new();
+    for sp in subpaths {
+        let deduped: Vec<usize> = sp.into_iter().filter(|v| seen.insert(*v)).collect();
+        if !deduped.is_empty() {
+            unique_subpaths.push(deduped);
+        }
+    }
+
+    if unique_subpaths.is_empty() {
+        //Fallback
+        unique_subpaths = parent_a.iter().map(|&v| vec![v]).collect();
+    }
+
+    let partial = join_subpaths_randomly(unique_subpaths);
+    let (fixed, _) = fix_route(&partial, distance_matrix, rewards);
+    fixed
+}
+
+fn recombine_op2(
+    parent_a: &[usize],
+    parent_b: &[usize],
+    distance_matrix: &Vec<Vec<i64>>,
+    rewards: &Vec<i64>,
+    neighborhood_type: NeighborhoodType,
+    greedy: bool,
+    with_ls: bool,
+) -> (Vec<usize>, i64) {
+    let eset_b = route_edge_set(parent_b);
+    let n = parent_a.len();
+
+    let mut subpaths: Vec<Vec<usize>> = Vec::new();
+    let mut current: Vec<usize> = vec![parent_a[0]];
+
+    for i in 0..n {
+        let u = parent_a[i];
+        let v = parent_a[(i + 1) % n];
+        let edge = if u < v { (u, v) } else { (v, u) };
+        if eset_b.contains(&edge) {
+            current.push(v);
+        } else {
+            if current.len() >= 1 {
+                subpaths.push(current.clone());
+            }
+            current = vec![v];
+        }
+    }
+    if current.len() > 1 {
+        subpaths.push(current);
+    }
+
+    let mut seen: HashSet<usize> = HashSet::new();
+    let mut unique_subpaths: Vec<Vec<usize>> = Vec::new();
+    for sp in subpaths {
+        let deduped: Vec<usize> = sp.into_iter().filter(|v| seen.insert(*v)).collect();
+        if !deduped.is_empty() {
+            unique_subpaths.push(deduped);
+        }
+    }
+
+    if unique_subpaths.is_empty() {
+        unique_subpaths = vec![vec![parent_a[0]]];
+    }
+
+    let partial = join_subpaths_randomly(unique_subpaths);
+    let (mut fixed, mut fixed_score) = fix_route(&partial, distance_matrix, rewards);
+
+    if with_ls {
+        let (ls_route, ls_score) = local_search(
+            &mut fixed,
+            distance_matrix,
+            rewards,
+            &mut fixed_score,
+            neighborhood_type,
+            greedy,
+        );
+        return (ls_route, ls_score);
+    }
+    (fixed, fixed_score)
+}
+
+fn recombine_op3(
+    parent_a: &[usize],
+    parent_b: &[usize],
+    distance_matrix: &Vec<Vec<i64>>,
+    rewards: &Vec<i64>,
+    neighborhood_type: NeighborhoodType,
+    greedy: bool,
+    with_ls: bool,
+) -> (Vec<usize>, i64) {
+    let vset_b: HashSet<usize> = parent_b.iter().cloned().collect();
+
+    let partial: Vec<usize> = parent_a.iter().cloned().filter(|v| vset_b.contains(v)).collect();
+
+    let (mut fixed, mut fixed_score) = if partial.len() >= 2 {
+        fix_route(&partial, distance_matrix, rewards)
+    } else {
+        fix_route(&vec![parent_a[0]], distance_matrix, rewards)
+    };
+
+    if with_ls {
+        let (ls_route, ls_score) = local_search(
+            &mut fixed,
+            distance_matrix,
+            rewards,
+            &mut fixed_score,
+            neighborhood_type,
+            greedy,
+        );
+        return (ls_route, ls_score);
+    }
+    (fixed, fixed_score)
+}
+
+
+fn run_hae(
+    distance_matrix: &Vec<Vec<i64>>,
+    rewards: &Vec<i64>,
+    neighborhood_type: NeighborhoodType,
+    greedy: bool,
+    time_limit: std::time::Duration,
+    pop_size: usize,
+    operator: HaeOperator,
+) -> (Vec<usize>, i64, usize) {
+    let mut rng = rand::thread_rng();
+    let n = distance_matrix.len();
+
+    let mut population: Vec<(Vec<usize>, i64)> = Vec::with_capacity(pop_size);
+    while population.len() < pop_size {
+        let mut visit_subset: Vec<usize> = (0..n).collect();
+        visit_subset.shuffle(&mut rng);
+        let (mut route, mut score, _) = solve_random(distance_matrix, rewards, &visit_subset, false);
+        let (opt_route, opt_score) = local_search(
+            &mut route,
+            distance_matrix,
+            rewards,
+            &mut score,
+            neighborhood_type,
+            greedy,
+        );
+
+        let is_dup = population.iter().any(|(r, _)| *r == opt_route);
+        if !is_dup {
+            population.push((opt_route, opt_score));
+        }
+    }
+
+    let (mut best_route, mut best_score) =
+        population.iter().max_by_key(|(_, s)| s).map(|(r, s)| (r.clone(), *s)).unwrap();
+
+    let mut iterations = 0usize;
+    let start_time = std::time::Instant::now();
+
+    while start_time.elapsed() < time_limit {
+        iterations += 1;
+
+        let idx_a = rng.gen_range(0..pop_size);
+        let mut idx_b = rng.gen_range(0..pop_size - 1);
+        if idx_b >= idx_a { idx_b += 1; }
+
+        let parent_a = &population[idx_a].0.clone();
+        let parent_b = &population[idx_b].0.clone();
+
+        let (child_route, child_score) = match operator {
+            HaeOperator::Op1 => {
+                let route = recombine_op1(parent_a, parent_b, distance_matrix, rewards);
+                let score = calculate_score(&route, distance_matrix, rewards);
+                let mut r = route;
+                let mut s = score;
+                local_search(&mut r, distance_matrix, rewards, &mut s, neighborhood_type, greedy)
+            }
+            HaeOperator::Op2WithLs =>
+                recombine_op2(parent_a, parent_b, distance_matrix, rewards, neighborhood_type, greedy, true),
+            HaeOperator::Op2NoLs =>
+                recombine_op2(parent_a, parent_b, distance_matrix, rewards, neighborhood_type, greedy, false),
+            HaeOperator::Op3WithLs =>
+                recombine_op3(parent_a, parent_b, distance_matrix, rewards, neighborhood_type, greedy, true),
+            HaeOperator::Op3NoLs =>
+                recombine_op3(parent_a, parent_b, distance_matrix, rewards, neighborhood_type, greedy, false),
+        };
+
+        if child_score > best_score {
+            best_score = child_score;
+            best_route = child_route.clone();
+        }
+
+        let (worst_idx, &(_, worst_score)) = population
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, (_, s))| s)
+            .unwrap();
+
+        if child_score > worst_score {
+            let is_dup = population.iter().any(|(r, _)| *r == child_route);
+            if !is_dup {
+                population[worst_idx] = (child_route, child_score);
+            }
+        }
+    }
+
+    (best_route, best_score, iterations)
+}
+
+fn run_hae_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
+    use std::time::Instant;
+    use rand::seq::SliceRandom;
+
+    let iterations   = 20usize;
+    let pop_size     = 20usize;
+    let neighborhood_type = NeighborhoodType::EdgeSwap;
+    let greedy       = false;
+
+
+    // ---- determine time budget from MSLS (same as run_extended_tests) ----
+    println!("[HAE] Calibrating time limit via MSLS ...");
+    let mut rng = rand::thread_rng();
+    let mut msls_max_time = 0i64;
+    for _ in 0..2 {
+        let t0 = Instant::now();
+        let _ = run_msls(distance_matrix, rewards, neighborhood_type, greedy);
+        let elapsed = t0.elapsed().as_millis() as i64;
+        if elapsed > msls_max_time { msls_max_time = elapsed; }
+    }
+    let time_limit = std::time::Duration::from_millis(msls_max_time as u64);
+    println!("[HAE] Time limit per run: {} ms", msls_max_time);
+
+    // ---- operators to benchmark ----
+    let operators = vec![
+        HaeOperator::Op1,
+        HaeOperator::Op2WithLs,
+        HaeOperator::Op2NoLs,
+        HaeOperator::Op3WithLs,
+        HaeOperator::Op3NoLs,
+    ];
+
+    for op in &operators {
+        let mut scores      = Vec::with_capacity(iterations);
+        let mut times       = Vec::with_capacity(iterations);
+        let mut iter_counts = Vec::with_capacity(iterations);
+        let mut best_solution: Option<(Vec<usize>, i64)> = None;
+        let mut best_score = i64::MIN;
+
+        let filename = format!("./solutions/solution_hae_{}_b_.csv", op);
+        let mut file = std::fs::File::options()
+            .append(true)
+            .create(true)
+            .open(&filename)
+            .expect("Failed to open or create the file");
+        writeln!(&mut file, "iteration,score,time_ms,hae_iterations").unwrap();
+
+        println!("[HAE] Running operator {} ({} runs) ...", op, iterations);
+
+        for iter in 0..iterations {
+            let t0 = Instant::now();
+            let (route, score, hae_iters) = run_hae(
+                distance_matrix,
+                rewards,
+                neighborhood_type,
+                greedy,
+                time_limit,
+                pop_size,
+                *op,
+            );
+            let elapsed = t0.elapsed().as_millis() as i64;
+
+            // Sanity check
+            let recalc = calculate_score(&route, distance_matrix, rewards);
+            assert_eq!(
+                score, recalc,
+                "HAE score mismatch at operator {}, iteration {}",
+                op, iter
+            );
+
+            scores.push(score);
+            times.push(elapsed);
+            iter_counts.push(hae_iters as i64);
+
+            if score > best_score {
+                best_score = score;
+                best_solution = Some((route.clone(), score));
+            }
+
+            writeln!(&mut file, "{},{},{},{}", iter, score, elapsed, hae_iters).unwrap();
+            println!("  iter {}/{}: score={}, time={}ms, hae_iters={}", iter+1, iterations, score, elapsed, hae_iters);
+        }
+
+        // Summary statistics
+        let avg_score     = scores.iter().sum::<i64>() as f64 / scores.len() as f64;
+        let min_score     = *scores.iter().min().unwrap_or(&0);
+        let max_score     = *scores.iter().max().unwrap_or(&0);
+        let avg_time      = times.iter().sum::<i64>() as f64 / times.len() as f64;
+        let min_time      = *times.iter().min().unwrap_or(&0);
+        let max_time      = *times.iter().max().unwrap_or(&0);
+        let avg_iters     = iter_counts.iter().sum::<i64>() as f64 / iter_counts.len() as f64;
+
+        writeln!(
+            &mut file,
+            "avg_score,min_score,max_score,avg_time_ms,min_time_ms,max_time_ms,avg_hae_iterations"
+        ).unwrap();
+        writeln!(
+            &mut file,
+            "{:.2},{},{},{:.2},{},{},{:.1}",
+            avg_score, min_score, max_score, avg_time, min_time, max_time, avg_iters
+        ).unwrap();
+
+        if let Some((ref r, s)) = best_solution {
+            writeln!(&mut file, "best_solution,{:?},{}", r, s).unwrap();
+        }
+
+        println!(
+            "[HAE {}] avg={:.0}, min={}, max={}, avg_iters={:.0}",
+            op, avg_score, min_score, max_score, avg_iters
+        );
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -1865,7 +2281,8 @@ fn main() {
      //run_search_tests(&distance_matrix, &rewards, 100);
     // run_candidate_tests(&distance_matrix, &rewards, 100);
     //run_extended_tests(&distance_matrix, &rewards);
-    run_global_tests(&distance_matrix, &rewards);
+    //run_global_tests(&distance_matrix, &rewards);
+    run_hae_tests(&distance_matrix, &rewards);
 
 
 }
