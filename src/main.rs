@@ -1703,7 +1703,7 @@ fn run_global_tests(distance_matrix: &Vec<Vec<i64>>, rewards: &Vec<i64>) {
     let mut rng = rand::thread_rng();
     let n_local = 1000usize;
     let neighborhood_type = NeighborhoodType::EdgeSwap;
-    let greedy = false;
+    let greedy = true;
 
     // --- Step 1: generate very good solution via ILS ---
     let good_time = std::time::Duration::from_secs(30);
